@@ -158,41 +158,41 @@ void CLanServer::RunAcceptThread()
 
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
-			int idx = 0;
-			for (; idx < _max_client; idx++)
+			
+			for (int idx = 0; idx < _max_client; idx++)
 			{
 				if (session_arr[idx].used == false)
 				{
 					session_arr[idx].used = true;
+					Session* session = &session_arr[idx];
+
+					session->sock = client_sock;
+					wcscpy_s(session->ip, _countof(session->ip), temp_ip);
+					session->port = ntohs(clientaddr.sin_port);
+					session->io_count = 0;
+					session->release_flag = 0;
+					session->session_id = session_id++;
+					session->send_flag = false;
+					session->send_packet_cnt = 0;
+					session->send_q.ClearBuffer();
+					session->recv_q.ClearBuffer();
+
+					tracer.trace(10, session, session->session_id); // accept
+
+					//立加
+					monitor.IncAccept();
+
+					InterlockedIncrement((LONG*)&session_cnt);
+
+					CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
+
+					// RecvPost()
+					if (RecvPost(session))
+					{
+						OnClientJoin(session->session_id);
+					}
 					break;
 				}
-			}
-			Session* session = &session_arr[idx];
-
-			session->sock = client_sock;
-			wcscpy_s(session->ip, _countof(session->ip), temp_ip);
-			session->port = ntohs(clientaddr.sin_port);
-			session->io_count = 0;
-			session->release_flag = 0;
-			session->session_id = session_id++;
-			session->send_flag = false;
-			session->send_packet_cnt = 0;
-			session->send_q.ClearBuffer();
-			session->recv_q.ClearBuffer();
-
-			tracer.trace(10, session, session->session_id); // accept
-
-			//立加
-			monitor.IncAccept();
-
-			InterlockedIncrement((LONG*)&session_cnt);
-
-			CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
-
-			// RecvPost()
-			if (RecvPost(session))
-			{
-				OnClientJoin(session->session_id);
 			}
 		}
 	}
@@ -287,13 +287,14 @@ void CLanServer::RunIoThread()
 				monitor.UpdateSendPacket(cbTransferred);
 
 				CPacket* send_packet;
-				int packet_cnt = InterlockedExchange((LONG*)&session->send_packet_cnt, 0);
+				int packet_cnt = session->send_packet_cnt;
+				session->send_packet_cnt = 0;
 				while (packet_cnt--)
 				{
 					session->send_q.Dequeue((char*)&send_packet, 8);
 					delete send_packet;
 				}
-				InterlockedExchange((LONG*)&session->send_flag, false);
+				session->send_flag = false;
 				QueryPerformanceCounter(&send_end);
 				monitor.AddSendCompTime(&send_start, &send_end);
 
@@ -319,6 +320,8 @@ bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 
 	for (int idx = 0; idx < _max_client; idx++)
 	{
+		if (session_arr[idx].used == false) continue;
+
 		if (session_arr[idx].session_id == session_id)
 		{
 			session = &session_arr[idx];
@@ -360,14 +363,11 @@ void CLanServer::DisconnectSession(unsigned int session_id)
 
 	for (int idx = 0; idx < _max_client; idx++)
 	{
+		if (session_arr[idx].used == false) continue;
+
 		if (session_arr[idx].session_id == session_id)
 		{
 			session = &session_arr[idx];
-			if (session->session_id != session_id)
-			{
-				tracer.trace(12, session, session_id);
-				break;
-			}
 			InterlockedIncrement((LONG*)&session->io_count);
 			if (session->release_flag == 0)
 			{
@@ -523,13 +523,10 @@ void CLanServer::ReleaseSession(unsigned int session_id)
 
 	for (int idx = 0; idx < _max_client; idx++)
 	{
+		if (session_arr[idx].used == false) continue;
+
 		if (session_arr[idx].session_id == session_id)
 		{
-			if (session_arr[idx].used == false)
-			{
-				tracer.trace(44, 0, session_id);
-			}
-
 			session = &session_arr[idx];
 
 			flag = *((unsigned long long*)(&session->io_count));

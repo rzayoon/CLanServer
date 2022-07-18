@@ -11,9 +11,10 @@ public:
 
 	void Lock();
 	void Unlock();
-	unsigned int session_id;
 
 	bool used;
+	unsigned int session_id;
+
 	SOCKET sock;
 	RingBuffer recv_q = RingBuffer(2000);
 	RingBuffer send_q = RingBuffer(2000);
