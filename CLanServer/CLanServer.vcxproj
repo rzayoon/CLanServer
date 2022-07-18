@@ -142,13 +142,16 @@
     <ClInclude Include="CLanServer.h" />
     <ClInclude Include="CPacket.h" />
     <ClInclude Include="monitor.h" />
+    <ClInclude Include="Protocol.h" />
     <ClInclude Include="session.h" />
+    <ClInclude Include="Tracer.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CLanServer.cpp" />
     <ClCompile Include="CPacket.cpp" />
     <ClCompile Include="monitor.cpp" />
     <ClCompile Include="session.cpp" />
+    <ClCompile Include="Tracer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

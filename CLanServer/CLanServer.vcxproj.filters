@@ -27,6 +27,12 @@
     <ClInclude Include="session.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="Tracer.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Protocol.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CLanServer.cpp">
@@ -39,6 +45,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="session.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="Tracer.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

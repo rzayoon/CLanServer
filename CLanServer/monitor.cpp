@@ -31,6 +31,18 @@ void Monitor::IncSendPacket()
 	return;
 }
 
+void Monitor::IncFaultSession()
+{
+	InterlockedIncrement(&fault_session);
+	return;
+}
+
+void Monitor::IncNoSession()
+{
+	InterlockedIncrement(&no_session);
+	return;
+}
+
 void Monitor::IncRecv()
 {
 	InterlockedIncrement(&recv_per_sec);
@@ -92,10 +104,29 @@ void Monitor::AddRecvCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 {
 	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
 
-
+	
 	InterlockedAdd64((LONG64*)&recv_completion_time, deltaTime);
-
+	InterlockedIncrement(&recv_comp_cnt);
 }
+
+void Monitor::AddSendCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
+{
+	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+
+
+	InterlockedAdd64((LONG64*)&send_completion_time, deltaTime);
+	InterlockedIncrement(&send_comp_cnt);
+}
+
+void Monitor::AddOnRecvTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
+{
+	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+
+
+	InterlockedAdd64((LONG64*)&on_recv_time, deltaTime);
+	InterlockedIncrement(&on_recv_cnt);
+}
+
 
 void Monitor::Show()
 {
@@ -108,12 +139,20 @@ void Monitor::Show()
 	int now_send_packet = InterlockedExchange(&sendpacket_cnt, 0);
 	double now_recv_comp_time = InterlockedExchange64((LONG64*)&recv_completion_time, 0);
 	int now_send_post_in_recv = InterlockedExchange(&sendpost_in_recv_cnt, 0);
-
+	double now_send_comp_time = InterlockedExchange64((LONG64*)&send_completion_time, 0);
+	int rcv_cnt = InterlockedExchange(&recv_comp_cnt, 0);
+	int snd_cnt = InterlockedExchange(&send_comp_cnt, 0);
+	double now_on_recv_time = InterlockedExchange64((LONG64*)&on_recv_time, 0);
+	int on_rcv_cnt = InterlockedExchange(&on_recv_cnt, 0);
 
 	double send_time_avg = 0;
 	if (now_send != 0) send_time_avg = now_send_time / now_send;
 	double recv_comp_time_avg = 0;
-	if (now_recv != 0) recv_comp_time_avg = now_recv_comp_time / now_recv;
+	if (rcv_cnt != 0) recv_comp_time_avg = now_recv_comp_time / rcv_cnt;
+	double send_comp_time_avg = 0;
+	if (snd_cnt != 0) send_comp_time_avg = now_send_comp_time / snd_cnt;
+	double on_recv_time_avg = 0;
+	if (on_rcv_cnt != 0) on_recv_time_avg = now_on_recv_time / on_rcv_cnt;
 
 	int max_thread_one_session = InterlockedExchange(&MaxThreadOneSession, 0);
 	int max_io_cnt = InterlockedExchange(&MaxIOCount, 0);
@@ -135,24 +174,27 @@ void Monitor::Show()
 		"Session Count : %d\n"
 		"SEND/sec : %d\n"
 		"SendPacket/sec : %d\n"
-		"Send Completion\n"
+		"Send Completion : %.2lf us\n"
 		" > Packet max : %d\n"
 		" > Packet min : %d | count : %d\n"
 		" > Packet avg : %.1lf\n"
 		"RECV/sec : %d\n"
-		"Recv Completion\n"
-		" > Avg Proc : %.2lf us\n"
+		"Recv Completion : %.2lf us\n"
 		" > Send Post : %d\n"
+		" > OnRecv : %.2lf us\n"
 		"----------------------------------\n"
 		"Total WSASend Time : %.2lf us\n"
 		" > Avg : %.2lf us\n"
 		"Max Running Thread of Session : %d\n"
 		"Max IO Count : %d\n"
+		"Fault Session : %d\n"
+		"Not Found Session : %d\n"
 		,
 		total_accept, now_accept, accept_err, session_cnt, now_send, now_send_packet
+		, send_comp_time_avg
 		, max_packet, min_packet, _min_cnt, avg_packet
-		, now_recv, recv_comp_time_avg, now_send_post_in_recv
-		, now_send_time, send_time_avg, max_thread_one_session, max_io_cnt);
+		, now_recv, recv_comp_time_avg, now_send_post_in_recv, on_recv_time_avg
+		, now_send_time, send_time_avg, max_thread_one_session, max_io_cnt, fault_session, no_session);
 
 
 	return;

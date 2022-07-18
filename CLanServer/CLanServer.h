@@ -1,12 +1,17 @@
 #pragma once
 #include <Windows.h>
 
+#include "Tracer.h"
 #include "CPacket.h"
 #include "session.h"
 #include "monitor.h"
 
 class CLanServer
 {
+	enum {
+		MAX_SESSION = 500
+	};
+
 public:
 
 	CLanServer()
@@ -29,7 +34,7 @@ public:
 	virtual void OnClientJoin(/**/) = 0;
 	virtual void OnClientLeave() = 0;
 
-	virtual void OnRecv(unsigned int session_id, CPacket* packet) = 0;
+	virtual void OnRecv(unsigned int session_id, CPacket& packet) = 0;
 	virtual void OnSend(unsigned int session_id, int send_size) = 0;
 
 	virtual void OnWorkerThreadBegin() = 0;
@@ -41,7 +46,7 @@ public:
 private:
 
 	HANDLE hcp;
-	Monitor monitor;
+
 	HANDLE hAcceptThread;
 	HANDLE* hWorkerThread;
 	int num_of_worker;
@@ -53,7 +58,18 @@ private:
 	static unsigned long _stdcall AcceptThread(void* param);
 	static unsigned long _stdcall IoThread(void* param);
 
+	bool RecvPost(Session* session);
+	bool SendPost(Session* session);
+
+	int UpdateIOCount(Session* session);
+	void ReleaseSession(unsigned int session_id);
+
 	bool exit_flag = false;
 	bool isRunning = false;
+
+	Session session_arr[MAX_SESSION];
+	DWORD session_id = 1;
+
+	alignas(64) int session_cnt = 0;
 };
 
