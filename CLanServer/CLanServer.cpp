@@ -1,3 +1,5 @@
+#pragma comment(lib, "ws2_32")
+#pragma comment(lib, "winmm")
 
 #include <WinSock2.h>
 #include <WS2tcpip.h>
@@ -7,16 +9,19 @@
 #include "CLanServer.h"
 #include "Protocol.h"
 
-Monitor monitor;
-Tracer tracer;
 
-bool CLanServer::Start(char* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client)
+
+bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client)
 {
 	if (isRunning)
 	{
 		OnError(90, L"Duplicate Start Request\n");
 	}
+	_max_client = max_client;
+	wcscpy_s(_ip, ip);
+	_port = port;
 
+	session_arr = new Session[_max_client];
 	WSADATA wsa;
 
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
@@ -77,6 +82,7 @@ void CLanServer::Stop()
 	// interval 마다 확인하기?
 
 	delete[] hExit;
+	delete[] session_arr;
 
 	WSACleanup();
 
@@ -90,37 +96,55 @@ int CLanServer::GetSessionCount()
 
 unsigned long _stdcall CLanServer::AcceptThread(void* param)
 {
-	int retval;
 	CLanServer* server = (CLanServer*)param;
+	server->RunAcceptThread();
+	// this call이나 server-> 콜이나 그게 그거지만 편의상.. 
 
-	HANDLE hcp = server->hcp;
+	return 0;
+}
 
+unsigned long _stdcall CLanServer::IoThread(void* param)
+{
+	CLanServer* server = (CLanServer*)param;
+	server->RunIoThread();
+
+	return 0;
+}
+
+void CLanServer::RunAcceptThread()
+{
+	int retval;
+	wprintf(L"%d Accept thread On...\n", GetCurrentThreadId());
 	SOCKET listen_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (listen_sock == INVALID_SOCKET) {
-		server->OnError(4, L"Listen socket()\n");
-		return 0;
+		OnError(4, L"Listen socket()\n");
+		return;
 	}
 
 	SOCKADDR_IN serveraddr;
 	ZeroMemory(&serveraddr, sizeof(serveraddr));
 	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serveraddr.sin_port = htons(server->port);
+	InetPtonW(AF_INET, _ip, &serveraddr.sin_addr.s_addr);
+	serveraddr.sin_port = htons(_port);
 	retval = bind(listen_sock, (SOCKADDR*)&serveraddr, sizeof(serveraddr));
-	if (retval == SOCKET_ERROR) return 1;
+	if (retval == SOCKET_ERROR) return;
 
 	int size = 0;
 	setsockopt(listen_sock, SOL_SOCKET, SO_SNDBUF, (char*)&size, sizeof(size));
 
 
 	retval = listen(listen_sock, SOMAXCONN);
-	if (retval == SOCKET_ERROR) return 1;
+	if (retval == SOCKET_ERROR) return;
+
+	wprintf_s(L"Listen Port: %d\n", _port);
 
 	SOCKET client_sock;
 	SOCKADDR_IN clientaddr;
 	int addrlen;
-	
-	while (!server->exit_flag)
+	wchar_t temp_ip[16];
+	unsigned short temp_port;
+
+	while (!exit_flag)
 	{
 		addrlen = sizeof(clientaddr);
 		client_sock = accept(listen_sock, (SOCKADDR*)&clientaddr, &addrlen);
@@ -129,62 +153,62 @@ unsigned long _stdcall CLanServer::AcceptThread(void* param)
 			monitor.IncAcceptErr();
 			continue;
 		}
+		InetNtopW(AF_INET, &clientaddr.sin_addr, temp_ip, _countof(temp_ip));
+		temp_port = ntohs(clientaddr.sin_port);
 
-		int idx = 0;
-		for (; idx < MAX_SESSION; idx++)
+		if (OnConnectionRequest(temp_ip, temp_port))
 		{
-			if (server->session_arr[idx].used == false)
+			int idx = 0;
+			for (; idx < _max_client; idx++)
 			{
-				server->session_arr[idx].used = true;
-				break;
+				if (session_arr[idx].used == false)
+				{
+					session_arr[idx].used = true;
+					break;
+				}
+			}
+			Session* session = &session_arr[idx];
+
+			session->sock = client_sock;
+			wcscpy_s(session->ip, _countof(session->ip), temp_ip);
+			session->port = ntohs(clientaddr.sin_port);
+			session->io_count = 0;
+			session->release_flag = 0;
+			session->session_id = session_id++;
+			session->send_flag = false;
+			session->send_packet_cnt = 0;
+			session->send_q.ClearBuffer();
+			session->recv_q.ClearBuffer();
+
+			tracer.trace(10, session, session->session_id); // accept
+
+			//접속
+			monitor.IncAccept();
+
+			InterlockedIncrement((LONG*)&session_cnt);
+
+			CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
+
+			// RecvPost()
+			if (RecvPost(session))
+			{
+				OnClientJoin(session->session_id);
 			}
 		}
-		Session* session = &server->session_arr[idx];
-
-		session->sock = client_sock;
-		inet_ntop(AF_INET, &clientaddr.sin_addr, session->ip, sizeof(session->ip));
-		session->port = ntohs(clientaddr.sin_port);
-		session->io_count = 0;
-		session->session_id = server->session_id++;
-		session->send_flag = false;
-		session->send_packet_cnt = 0;
-		session->send_q.ClearBuffer();
-		session->recv_q.ClearBuffer();
-		session->thread_run = 0;
-
-		//debugging
-		session->lastRecv = 0;
-		session->lastSend = 0;
-		session->lastSendError = 0;
-		session->lastTransferredZero = 0;
-
-		//접속
-		monitor.IncAccept();
-
-		InterlockedIncrement((LONG*)&server->session_cnt);
-
-		CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
-
-		// RecvPost()
-		server->RecvPost(session);
-
 	}
-
-	return 0;
-
 }
 
-unsigned long _stdcall CLanServer::IoThread(void* param)
+void CLanServer::RunIoThread()
 {
-	int ret_gqcp, ret_deq;
-	CLanServer* server = (CLanServer*)param;
-	HANDLE hcp = server->hcp;
+	int ret_gqcp;
 	DWORD thread_id = GetCurrentThreadId();
 	CPacket packet;
 	LARGE_INTEGER recv_start, recv_end;
 	LARGE_INTEGER send_start, send_end;
 	LARGE_INTEGER on_recv_st, on_recv_ed;
 	DWORD error_code;
+
+	wprintf(L"%d worker thread On...\n", thread_id);
 
 	while (1)
 	{
@@ -204,22 +228,21 @@ unsigned long _stdcall CLanServer::IoThread(void* param)
 			//에러코드 로깅
 			error_code = GetLastError();
 			if (error_code != ERROR_NETNAME_DELETED)
-				tracer.trace(00, error_code);
+				tracer.trace(00, NULL, error_code);
 		}
-
-		//session->Lock();
 
 		if (cbTransferred == 0) // Pending 후 I/O 처리 실패
 		{
-			tracer.trace(53, session->session_id, session->recv_q.GetFillSize(), (PVOID)session->io_count);
+	
 			SOCKET temp_sock = InterlockedExchange(&session->sock, INVALID_SOCKET);
 			if (temp_sock != INVALID_SOCKET)
 				closesocket(temp_sock);
 		}
 		else {
+			OnWorkerThreadBegin();
 			if (&session->recv_overlapped == overlapped) // recv 결과 처리
 			{
-
+				tracer.trace(21, session, session->session_id);
 				QueryPerformanceCounter(&recv_start);
 
 
@@ -245,24 +268,25 @@ unsigned long _stdcall CLanServer::IoThread(void* param)
 					packet.MoveWritePos(ret_deq);
 
 					QueryPerformanceCounter(&on_recv_st);
-					server->OnRecv(session->session_id, packet);
+					OnRecv(session->session_id, &packet);
 					QueryPerformanceCounter(&on_recv_ed);
 					monitor.AddOnRecvTime(&on_recv_st, &on_recv_ed);
 				}
-
-				tracer.trace(51, GetCurrentThreadId(), session->session_id);
-				server->RecvPost(session);
-
 				QueryPerformanceCounter(&recv_end);
 				monitor.AddRecvCompTime(&recv_start, &recv_end);
 				monitor.IncRecv();
+
+				tracer.trace(22, session, session->session_id);
+				RecvPost(session);
+
 			}
 			else if (&session->send_overlapped == overlapped) // send 결과 처리
 			{
+				tracer.trace(31, session, session->session_id);
 				QueryPerformanceCounter(&send_start);
 				monitor.UpdateSendPacket(cbTransferred);
 
-				CPacket* send_packet; // 수정
+				CPacket* send_packet;
 				int packet_cnt = InterlockedExchange((LONG*)&session->send_packet_cnt, 0);
 				while (packet_cnt--)
 				{
@@ -270,36 +294,226 @@ unsigned long _stdcall CLanServer::IoThread(void* param)
 					delete send_packet;
 				}
 				InterlockedExchange((LONG*)&session->send_flag, false);
-
-				tracer.trace(52, GetCurrentThreadId(), session->session_id);
-				if (session->send_q.GetFillSize() > 0)
-					server->SendPost(session);
-
 				QueryPerformanceCounter(&send_end);
 				monitor.AddSendCompTime(&send_start, &send_end);
+
+				tracer.trace(32, session, session->session_id);
+				if (session->send_q.GetFillSize() > 0)
+					SendPost(session);
+
 			}
 		}
-		server->UpdateIOCount(session);
-		//session->Unlock();
+		UpdateIOCount(session);
+		OnWorkerThreadEnd();
 	}
 
-	return 0;
+	return;
+}
 
+bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
+{
+	monitor.IncSendPacket();
+	bool ret = false;
+	Session* session = nullptr;
+	bool check = false; // 누수 체크용
+
+	for (int idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].session_id == session_id)
+		{
+			session = &session_arr[idx];
+			if (session->session_id != session_id)
+			{
+				tracer.trace(11, session, session_id);
+				break;
+			}
+			InterlockedIncrement((LONG*)&session->io_count);
+			if (session->release_flag == 0)
+			{
+				session->send_q.Enqueue((char*)&packet, 8);  // 64 bit 기준 8byte
+
+				ret = SendPost(session);
+				if (ret == false) // 실질적인 send post 호출 성공
+					monitor.IncSendPostInRecv();
+
+				check = true;
+			}
+			UpdateIOCount(session);
+			break;
+		}
+	}
+
+
+	if (!check)
+	{
+		monitor.IncNoSession();
+	}
+
+
+
+	return ret;
+}
+
+void CLanServer::DisconnectSession(unsigned int session_id)
+{
+	Session* session = nullptr;
+
+	for (int idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].session_id == session_id)
+		{
+			session = &session_arr[idx];
+			if (session->session_id != session_id)
+			{
+				tracer.trace(12, session, session_id);
+				break;
+			}
+			InterlockedIncrement((LONG*)&session->io_count);
+			if (session->release_flag == 0)
+			{
+				SOCKET temp_sock = InterlockedExchange(&session->sock, INVALID_SOCKET);
+				if (temp_sock != INVALID_SOCKET)
+					closesocket(temp_sock);
+
+			}
+			UpdateIOCount(session);
+			break;
+		}
+	}
+
+	return;
 }
 
 bool CLanServer::RecvPost(Session* session)
 {
-	return false;
+	DWORD recvbytes, flags = 0;
+
+	ZeroMemory(&session->recv_overlapped, sizeof(session->recv_overlapped));
+
+	int emptySize = session->recv_q.GetEmptySize();
+	int size1 = session->recv_q.DirectEnqueSize();
+
+	WSABUF wsabuf[2];
+	int cnt = 1;
+	wsabuf[0].buf = session->recv_q.GetRearPtr();
+	wsabuf[0].len = size1;
+
+	if (size1 < emptySize)
+	{
+		++cnt;
+		wsabuf[1].buf = session->recv_q.GetBufPtr();
+		wsabuf[1].len = emptySize - size1;
+	}
+
+	int temp = InterlockedIncrement((LONG*)&session->io_count);
+	monitor.UpdateMaxIOCount(temp);
+
+
+	DWORD error_code;
+	int retval = WSARecv(session->sock, wsabuf, cnt, &recvbytes, &flags, &session->recv_overlapped, NULL);
+	if (retval == SOCKET_ERROR)
+	{
+		if ((error_code = WSAGetLastError()) != ERROR_IO_PENDING)
+		{ // 요청이 실패
+			int io_temp = UpdateIOCount(session);
+			tracer.trace(1, session, error_code);
+		}
+		else
+		{
+			// Pending
+		}
+	}
+	else
+	{
+		//동기 recv
+	}
+
+	return true;
 }
 
 bool CLanServer::SendPost(Session* session)
 {
-	return false;
+	bool temp;
+	LARGE_INTEGER start, end;
+
+	if ((temp = InterlockedExchange((LONG*)&session->send_flag, true)) == false)
+	{
+		if (session->send_q.GetFillSize() == 0)
+		{
+			tracer.trace(20, 0);
+			session->send_flag = false;
+			return true;
+		}
+
+		int retval;
+
+		ZeroMemory(&session->send_overlapped, sizeof(session->send_overlapped));
+
+		// 개선 필요
+		int currentSize = session->send_q.GetFillSize();
+
+		char buf[1000];
+		session->send_q.Peek(buf, currentSize);
+		CPacket* packet;
+		CPacket** ptr = (CPacket**)buf;
+		WSABUF wsabuf[MAX_WSABUF];
+		int buf_cnt = currentSize / sizeof(CPacket*);
+		if (buf_cnt > MAX_WSABUF)
+			buf_cnt = MAX_WSABUF;
+
+		for (int cnt = 0; cnt < buf_cnt; cnt++)
+		{
+			packet = *ptr;
+			wsabuf[cnt].buf = packet->GetBufferPtrWithHeader();
+			wsabuf[cnt].len = packet->GetDataSizeWithHeader();
+			++ptr;
+		}
+		session->send_packet_cnt = buf_cnt;
+		DWORD sendbytes;
+		int temp = InterlockedIncrement((LONG*)&session->io_count);
+		monitor.UpdateMaxIOCount(temp);
+		monitor.IncSend();
+
+		tracer.trace(33, session, session->session_id);
+
+		QueryPerformanceCounter(&start);
+		retval = WSASend(session->sock, wsabuf, buf_cnt, &sendbytes, 0, &session->send_overlapped, NULL);
+		QueryPerformanceCounter(&end);
+		monitor.AddSendTime(&start, &end);
+
+		DWORD error_code;
+		if (retval == SOCKET_ERROR)
+		{
+			if ((error_code = WSAGetLastError()) != WSA_IO_PENDING) // 요청 자체가 실패
+			{
+				// 내가 release 시켜야하는 경우 Packet 해제 해줘야 함
+				int io_temp = UpdateIOCount(session);
+				tracer.trace(2, session, error_code);
+			}
+			else
+			{
+				// Pending
+			}
+		}
+		else
+		{
+			//동기처리
+		}
+
+	}
+
+	return temp;
 }
 
 int CLanServer::UpdateIOCount(Session* session)
 {
-	return 0;
+	int temp;
+	if ((temp = InterlockedDecrement((LONG*)&session->io_count)) == 0)
+	{
+		ReleaseSession(session->session_id);
+	}
+
+	return temp;
 }
 
 void CLanServer::ReleaseSession(unsigned int session_id)
@@ -307,13 +521,13 @@ void CLanServer::ReleaseSession(unsigned int session_id)
 	Session* session;
 	unsigned long long flag;
 
-	for (int idx = 0; idx < MAX_SESSION; idx++)
+	for (int idx = 0; idx < _max_client; idx++)
 	{
 		if (session_arr[idx].session_id == session_id)
 		{
 			if (session_arr[idx].used == false)
 			{
-				tracer.trace(10, 0);
+				tracer.trace(44, 0, session_id);
 			}
 
 			session = &session_arr[idx];
@@ -333,11 +547,16 @@ void CLanServer::ReleaseSession(unsigned int session_id)
 				session->sock = INVALID_SOCKET;
 				session->used = false;
 
+				OnClientLeave();
+
 				InterlockedDecrement((LONG*)&session_cnt);  // 없어도 동기화 문제 없음..??
 			}
 			break;
 		}
 	}
+
+	
+
 	return;
 }
 

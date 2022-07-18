@@ -28,7 +28,7 @@ public:
 		on_recv_cnt = 0;
 
 		max_send_packet = 0;
-		min_send_packet = 9999999999;
+		min_send_packet = (LONG)999999999;
 		min_cnt = 0;
 		total_send_packet = 0;
 		___cnt = 0;
@@ -60,9 +60,10 @@ public:
 	void UpdateMaxIOCount(int temp);
 	void UpdateSendPacket(LONG size);
 
-	void Show();
+	void Show(int session_cnt);
 
 private:
+
 
 	alignas(64) LONG total_accept;
 	alignas(64) LONG send_per_sec;

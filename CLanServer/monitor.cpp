@@ -1,11 +1,9 @@
 #include <Windows.h>
 #include <stdio.h>
-#include <unordered_map>
+
+#include "CLanServer.h"
 #include "monitor.h"
 #include "session.h"
-using std::unordered_map;
-
-extern alignas(64) int session_cnt;
 
 void Monitor::IncAccept()
 {
@@ -128,7 +126,7 @@ void Monitor::AddOnRecvTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 }
 
 
-void Monitor::Show()
+void Monitor::Show(int session_cnt)
 {
 
 	int now_accept = InterlockedExchange(&accept, 0);

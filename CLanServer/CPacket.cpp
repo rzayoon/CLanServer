@@ -1,16 +1,16 @@
 #include <string.h>
 #include "CPacket.h"
+#include "Protocol.h"
 
 
 CPacket::CPacket(int size)
 {
 	buffer_size = size;
-	data_size = 0;
+	
 
-	buffer = new char[size];
-	write_pos = 0;
-	read_pos = 0;
-
+	hidden_buf = new char[size + sizeof(PacketHeader)];
+	buffer = hidden_buf + sizeof(PacketHeader);
+	Clear();
 
 }
 
@@ -32,14 +32,17 @@ CPacket::~CPacket()
 
 void CPacket::Release(void)
 {
-	if (buffer != nullptr)	delete[] buffer;
+	if (buffer != nullptr)	delete[] hidden_buf;
 }
 
 void CPacket::Clear(void)
 {
+	data_size = 0;
 	write_pos = 0;
 	read_pos = 0;
-	data_size = 0;
+
+	PacketHeader* header = (PacketHeader*)hidden_buf;
+	header->len = 0;
 }
 
 int CPacket::MoveWritePos(int size)
@@ -256,5 +259,17 @@ int CPacket::PutData(char* src, int size)
 	data_size += size;
 
 	return size;
+}
 
+char* CPacket::GetBufferPtrWithHeader(void)
+{
+	PacketHeader* header = (PacketHeader*)hidden_buf;
+	header->len = data_size;
+	return hidden_buf;
+
+}
+
+int CPacket::GetDataSizeWithHeader(void)
+{
+	return data_size + sizeof(PacketHeader);
 }

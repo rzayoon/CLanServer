@@ -13,8 +13,7 @@ class Tracer
 		unsigned int id;
 		unsigned long long seq;
 		char act;
-		unsigned int err_code;
-		PVOID ptr;
+		PVOID session;
 		long long info;
 	};
 public:
@@ -25,10 +24,8 @@ public:
 	}
 	~Tracer()
 	{
-
-
 	}
-	void trace(char code, unsigned int err = 0, long long value = 0, PVOID ptr = 0);
+	void trace(char code, PVOID session, long long value = 0);
 
 	void Crash();
 private:

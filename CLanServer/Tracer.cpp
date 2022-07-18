@@ -9,7 +9,7 @@ const unsigned int Tracer::mask = 0xFFFF;
 
 
 
-void Tracer::trace(char code, unsigned int err, long long value, PVOID ptr)
+void Tracer::trace(char code, PVOID session, long long value)
 {
 	unsigned long long seq = InterlockedIncrement64(&pos);
 	unsigned int _pos = seq & mask;
@@ -17,8 +17,7 @@ void Tracer::trace(char code, unsigned int err, long long value, PVOID ptr)
 	buf[_pos].id = GetCurrentThreadId();
 	buf[_pos].seq = seq;
 	buf[_pos].act = code;
-	buf[_pos].err_code = err;
-	buf[_pos].ptr = ptr;
+	buf[_pos].session = session;
 	buf[_pos].info = value;
 }
 

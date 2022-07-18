@@ -1,7 +1,7 @@
 #pragma once
 
 #include <Windows.h>
-
+#include "session.h"
 
 class CPacket
 {
@@ -11,6 +11,8 @@ public:
 		eBUFFER_DEFAULT = 2000
 	};
 
+	friend class CLanServer;
+	
 	CPacket(int size = eBUFFER_DEFAULT);
 	
 	CPacket(CPacket& src);
@@ -21,13 +23,13 @@ public:
 	/// 패킷 파괴
 	/// </summary>
 	/// <param name=""></param>
-	void Release(void);
+	inline void Release(void);
 
 	/// <summary>
 	/// 패킷 청소
 	/// </summary>
 	/// <param name=""></param>
-	void Clear(void);
+	inline void Clear(void);
 
 	/// <summary>
 	/// 버퍼 사이즈
@@ -110,7 +112,11 @@ public:
 
 protected:
 
+	char* GetBufferPtrWithHeader(void);
+	int GetDataSizeWithHeader(void);
+
 	char* buffer;
+	char* hidden_buf;
 	int write_pos;
 	int read_pos;
 
