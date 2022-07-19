@@ -1,4 +1,6 @@
 #include "EchoServer.h"
+#include "CPacket.h"
+#include "Protocol.h"
 
 bool EchoServer::OnConnectionRequest(wchar_t* ip, unsigned short port) // 화이트리스트
 {
@@ -7,7 +9,12 @@ bool EchoServer::OnConnectionRequest(wchar_t* ip, unsigned short port) // 화이트
 
 void EchoServer::OnClientJoin(unsigned int session_id)
 {
+	CPacket* packet = new CPacket;
 
+	__int64 data = 0x7fffffffffffffff;
+	*packet << data;
+
+	SendPacket(session_id, packet);
 }
 
 void EchoServer::OnClientLeave()

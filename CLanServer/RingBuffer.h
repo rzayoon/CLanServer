@@ -100,5 +100,6 @@ private:
 
 	SRWLOCK srw;
 	alignas(64) int fillSize;
+	alignas(64) int b;
 };
 

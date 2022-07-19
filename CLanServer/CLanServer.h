@@ -48,8 +48,6 @@ public:
 
 private:
 
-	Monitor monitor;
-	Tracer tracer;
 
 	HANDLE hcp;
 
@@ -79,6 +77,9 @@ private:
 
 	Session* session_arr;
 	DWORD session_id = 1;
+	
+	Monitor monitor;
+	Tracer tracer;
 
 	alignas(64) int session_cnt = 0;
 };

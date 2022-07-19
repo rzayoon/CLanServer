@@ -160,6 +160,9 @@
     <ClInclude Include="CLanServer.h" />
     <ClInclude Include="CPacket.h" />
     <ClInclude Include="EchoServer.h" />
+    <ClInclude Include="LockFreePool.h" />
+    <ClInclude Include="LockFreeQueue.h" />
+    <ClInclude Include="LockFreeStack.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="Protocol.h" />
     <ClInclude Include="RingBuffer.h" />

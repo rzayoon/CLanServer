@@ -29,9 +29,11 @@ public:
 
 	void Crash();
 private:
-	alignas(64) LONG64 pos;
 
 	DebugNode buf[65536];
+	alignas(64) LONG64 pos;
+	alignas(64) LONG b;
+
 	static const unsigned int mask;
 
 };

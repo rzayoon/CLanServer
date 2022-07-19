@@ -6,6 +6,7 @@
 
 #include <stdio.h>
 
+#include "LockFreeQueue.h"
 #include "CLanServer.h"
 #include "Protocol.h"
 
@@ -174,7 +175,7 @@ void CLanServer::RunAcceptThread()
 					session->session_id = session_id++;
 					session->send_flag = false;
 					session->send_packet_cnt = 0;
-					session->send_q.ClearBuffer();
+					//session->send_q.ClearBuffer(); 비어있어야 정상
 					session->recv_q.ClearBuffer();
 
 					tracer.trace(10, session, session->session_id); // accept
@@ -283,23 +284,26 @@ void CLanServer::RunIoThread()
 			else if (&session->send_overlapped == overlapped) // send 결과 처리
 			{
 				tracer.trace(31, session, session->session_id);
+				
 				QueryPerformanceCounter(&send_start);
 				monitor.UpdateSendPacket(cbTransferred);
 
 				CPacket* send_packet;
 				int packet_cnt = session->send_packet_cnt;
-				session->send_packet_cnt = 0;
-				while (packet_cnt--)
+
+				while (packet_cnt > 0)
 				{
-					session->send_q.Dequeue((char*)&send_packet, 8);
-					delete send_packet;
+					delete session->temp_packet[--packet_cnt];
 				}
+
+				session->send_packet_cnt = 0;
 				session->send_flag = false;
+
 				QueryPerformanceCounter(&send_end);
 				monitor.AddSendCompTime(&send_start, &send_end);
 
 				tracer.trace(32, session, session->session_id);
-				if (session->send_q.GetFillSize() > 0)
+				if (session->send_q.GetSize() > 0)
 					SendPost(session);
 
 			}
@@ -333,7 +337,7 @@ bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 			InterlockedIncrement((LONG*)&session->io_count);
 			if (session->release_flag == 0)
 			{
-				session->send_q.Enqueue((char*)&packet, 8);  // 64 bit 기준 8byte
+				session->send_q.Enqueue(packet);  // 64 bit 기준 8byte
 
 				ret = SendPost(session);
 				if (ret == false) // 실질적인 send post 호출 성공
@@ -438,39 +442,40 @@ bool CLanServer::SendPost(Session* session)
 
 	if ((temp = InterlockedExchange((LONG*)&session->send_flag, true)) == false)
 	{
-		if (session->send_q.GetFillSize() == 0)
+		int buf_cnt = session->send_q.GetSize();
+		if (buf_cnt <= 0)
 		{
-			tracer.trace(20, 0);
+			tracer.trace(77, session, session->session_id);
 			session->send_flag = false;
 			return true;
 		}
 
 		int retval;
 
+		int temp = InterlockedIncrement((LONG*)&session->io_count);
 		ZeroMemory(&session->send_overlapped, sizeof(session->send_overlapped));
 
 		// 개선 필요
-		int currentSize = session->send_q.GetFillSize();
-
-		char buf[1000];
-		session->send_q.Peek(buf, currentSize);
-		CPacket* packet;
-		CPacket** ptr = (CPacket**)buf;
-		WSABUF wsabuf[MAX_WSABUF];
-		int buf_cnt = currentSize / sizeof(CPacket*);
 		if (buf_cnt > MAX_WSABUF)
 			buf_cnt = MAX_WSABUF;
 
-		for (int cnt = 0; cnt < buf_cnt; cnt++)
+		CPacket* packet;
+		WSABUF wsabuf[MAX_WSABUF];
+
+		for (int cnt = 0; cnt < buf_cnt;)
 		{
-			packet = *ptr;
+			session->send_q.Dequeue(&packet);
+			if (packet == nullptr)
+				continue;
+
 			wsabuf[cnt].buf = packet->GetBufferPtrWithHeader();
 			wsabuf[cnt].len = packet->GetDataSizeWithHeader();
-			++ptr;
+			session->temp_packet[cnt] = packet;
+
+			++cnt;
 		}
 		session->send_packet_cnt = buf_cnt;
 		DWORD sendbytes;
-		int temp = InterlockedIncrement((LONG*)&session->io_count);
 		monitor.UpdateMaxIOCount(temp);
 		monitor.IncSend();
 
@@ -535,10 +540,17 @@ void CLanServer::ReleaseSession(unsigned int session_id)
 				session->session_id = -1;
 
 				CPacket* packet;
-				while (session->send_q.Dequeue((char*)&packet, 8))
+				while (session->send_q.Dequeue(&packet))
 				{
 					delete packet;
 				}
+
+				int remain = session->send_packet_cnt;
+				while (remain > 0)
+				{
+					delete session->temp_packet[--remain];
+				}
+
 				if (session->sock != INVALID_SOCKET)
 					closesocket(session->sock);  // 동시에 closesocket 진입 가능성 아직 없음. 생기면 수정 필요
 				session->sock = INVALID_SOCKET;
