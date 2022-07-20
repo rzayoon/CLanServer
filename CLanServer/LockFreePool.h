@@ -1,7 +1,9 @@
 #pragma once
 #include <Windows.h>
+
+#include <new>
 #include <stdio.h>
-#include "Tracer.h"
+
 
 #define dfPAD -1
 #define dfADDRESS_MASK 0x00007fffffffffff
@@ -10,22 +12,22 @@
 template <class DATA>
 class LockFreePool
 {
+	enum
+	{
+		PAD = 0xABCDABCDABCDABCD
+	};
+
 	struct BLOCK_NODE
 	{
-		__int64 pad1;
+		unsigned long long front_pad;
 		DATA data;
-		__int64 pad2;
-		alignas(64) LONG use;
+		unsigned long long back_pad;
 		BLOCK_NODE* next;
 	
 
 		BLOCK_NODE()
 		{
-			pad1 = dfPAD;
-
-			pad2 = dfPAD;
 			next = nullptr;
-			use = 0;
 		}
 	};
 
@@ -73,12 +75,19 @@ public:
 	}
 
 protected:
+
+	void Crash()
+	{
+		int* a = (int*)0;
+		a = 0;
+
+	}
+
 	BLOCK_NODE* top;
 
-	BLOCK_NODE** pool;
-
-	int capacity;
+	bool placement_new;
 	alignas(64) unsigned int use_count;
+	alignas(64) unsigned int capacity;
 
 };
 
@@ -90,27 +99,38 @@ LockFreePool<DATA>::LockFreePool(int _capacity, bool _placement_new)
 	if ((_int64)si.lpMaximumApplicationAddress != 0x00007ffffffeffff)
 	{
 		printf("Maximum Application Address Fault\n");
-		int* a = (int*)0;
-		a = 0;
+		Crash();
 	}
 
+	placement_new = _placement_new;
 	capacity = _capacity;
 	use_count = 0;
 
-
-	pool = new BLOCK_NODE * [capacity];
-
-	BLOCK_NODE* next = nullptr;
-	for (int i = 0; i < capacity; i++)
+	if (placement_new)
 	{
-		BLOCK_NODE* temp = new BLOCK_NODE;
-		temp->next = next;
-		next = temp;
+		for (unsigned int i = 0; i < capacity; i++)
+		{
+			BLOCK_NODE* temp = (BLOCK_NODE*)malloc(sizeof(BLOCK_NODE));
+			temp->front_pad = PAD;
+			temp->back_pad = PAD;
 
-		pool[i] = temp;
-
+			temp->next = top;
+			top = temp;
+		}
 	}
-	top = next;
+	else
+	{
+		for (unsigned int i = 0; i < capacity; i++)
+		{
+			BLOCK_NODE* temp = new BLOCK_NODE;
+			temp->front_pad = PAD;
+			temp->back_pad = PAD;
+
+			temp->next = top;
+			top = temp;
+
+		}
+	}
 
 
 }
@@ -118,12 +138,28 @@ LockFreePool<DATA>::LockFreePool(int _capacity, bool _placement_new)
 template<class DATA>
 LockFreePool<DATA>::~LockFreePool()
 {
-	for (int i = 0; i < capacity; i++)
+	// 반환 안된 노드는 포기.. 어차피 전역에 놓고 쓸거라 
+	// 소멸 시점은 프로그램 종료 때
+	BLOCK_NODE* top_addr = (BLOCK_NODE*)((unsigned long long)top & dfADDRESS_MASK);
+	BLOCK_NODE* temp;
+	if (placement_new)
 	{
-		delete pool[i];
+		while (top_addr)
+		{
+			temp = top_addr->next;
+			free(top_addr);
+			top_addr = temp;
+		}
 	}
-	delete[] pool;
-
+	else
+	{
+		while (top_addr)
+		{
+			temp = top_addr->next;
+			delete top_addr;
+			top_addr = temp;
+		}
+	}
 }
 
 template<class DATA>
@@ -133,51 +169,77 @@ DATA* LockFreePool<DATA>::Alloc()
 	BLOCK_NODE* old_top_addr; // 실제 주소
 	BLOCK_NODE* next; // 다음 top
 	BLOCK_NODE* new_top;
+	InterlockedIncrement((LONG*)&use_count);
+
+	
 
 	while (1)
 	{
 		old_top = (unsigned long long)top;
 		old_top_addr = (BLOCK_NODE*)(old_top & dfADDRESS_MASK);
-		
-		
+
 		if (old_top_addr == nullptr)
 		{
-			return nullptr;
+			InterlockedIncrement(&capacity);
+			if (placement_new)
+			{
+				old_top_addr = (BLOCK_NODE*)malloc(sizeof(BLOCK_NODE));
+				old_top_addr->front_pad = PAD;
+				old_top_addr->back_pad = PAD;
+			}
+			else
+			{
+				old_top_addr = new BLOCK_NODE;
+				old_top_addr->front_pad = PAD;
+				old_top_addr->back_pad = PAD;
+			}
+		
+			break;
 		}
 
 
 		unsigned long long next_cnt = (old_top >> dfADDRESS_BIT) + 1;
 		next = old_top_addr->next;
-		
 
 		new_top = (BLOCK_NODE*)((unsigned long long)next | (next_cnt << dfADDRESS_BIT));
 
 
 		if (old_top == (unsigned long long)InterlockedCompareExchangePointer((PVOID*)&top, (PVOID)new_top, (PVOID)old_top))
 		{
+			
 			break;
 		}
 	}
-	InterlockedIncrement((LONG*)&use_count);
 
-	
-
-	return (DATA*)&old_top_addr->data;
+	if (placement_new)
+	{
+		DATA* ret = &old_top_addr->data;
+		new(ret) DATA;
+		return ret;
+	}
+	else
+	{
+		return &old_top_addr->data;
+	}
 }
 
 template<class DATA>
 bool LockFreePool<DATA>::Free(DATA* data)
 {
 	unsigned long long old_top;
-	BLOCK_NODE* node = (BLOCK_NODE*)((char*)data - sizeof(BLOCK_NODE::pad1));
+	// data가 8바이트 초과하면 문제될 수 있음 구조체 패딩 관련
+	BLOCK_NODE* node = (BLOCK_NODE*)((char*)data - sizeof(BLOCK_NODE::front_pad)); 
 	BLOCK_NODE* old_top_addr;
 	PVOID new_top;
 
-	if (node->pad1 != dfPAD || node->pad2 != dfPAD)
+	if (placement_new)
 	{
-		wprintf(L"LockFree Pool Node overrun\n");
-		int* a = (int*)0;
-		a = 0;
+		data->~DATA();
+	}
+
+	if (node->front_pad != PAD || node->back_pad != PAD) // 사용 중에 버퍼 오버런 있었는지 체크용
+	{
+		Crash();
 	}
 	
 
@@ -195,12 +257,10 @@ bool LockFreePool<DATA>::Free(DATA* data)
 
 		if (old_top == (unsigned long long)InterlockedCompareExchangePointer((PVOID*)&top, (PVOID)new_top, (PVOID)old_top))
 		{
+			InterlockedDecrement((LONG*)&use_count);
 			break;
 		}
-
 	}
 	
-	InterlockedDecrement((LONG*)&use_count);
-
 	return true;
 }

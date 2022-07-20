@@ -11,13 +11,10 @@ class LockFreeStack
 	{
 		T data;
 		Node* next;
-		int del_cnt;
 
 		Node()
 		{
-
 			next = nullptr;
-			del_cnt = 0;
 		}
 
 		~Node()
@@ -63,28 +60,26 @@ inline LockFreeStack<T>::~LockFreeStack()
 template<class T>
 inline bool LockFreeStack<T>::Push(T data)
 {
-	Node* temp = _pool->Alloc();
-
-	if (temp == nullptr)
+	Node* node = _pool->Alloc();
+	if (node == nullptr)
 		return false;
 
-	temp->del_cnt = 0;
-	temp->data = data;
+	node->data = data;
 
-	long long old_top;
+	unsigned long long old_top;
 	Node* old_top_addr;
 	Node* new_top;
 
 	while (1)
 	{
-		old_top = (long long)_top;
+		old_top = (unsigned long long)_top;
 		old_top_addr = (Node*)(old_top & dfADDRESS_MASK);
-		long long next_cnt = (old_top >> dfADDRESS_BIT) + 1;
-		temp->next = old_top_addr;
+		unsigned long long next_cnt = (old_top >> dfADDRESS_BIT) + 1;
+		node->next = old_top_addr;
 
-		new_top = (Node*)((long long)temp | (next_cnt << dfADDRESS_BIT));
+		new_top = (Node*)((unsigned long long)node | (next_cnt << dfADDRESS_BIT));
 
-		if (old_top == (long long)InterlockedCompareExchangePointer((PVOID*)&_top, new_top, (PVOID)old_top))
+		if (old_top == (unsigned long long)InterlockedCompareExchangePointer((PVOID*)&_top, new_top, (PVOID)old_top))
 		{
 			InterlockedIncrement(&_size);
 			break;
@@ -99,14 +94,14 @@ inline bool LockFreeStack<T>::Push(T data)
 template<class T>
 inline bool LockFreeStack<T>::Pop(T* data)
 {
-	long long old_top;
+	unsigned long long old_top;
 	Node* old_top_addr;
 	Node* next;
 	Node* new_top;
 
 	while (1)
 	{
-		old_top = (long long)_top;
+		old_top = (unsigned long long)_top;
 		old_top_addr = (Node*)(old_top & dfADDRESS_MASK);
 		if (old_top_addr == nullptr)
 		{
@@ -114,20 +109,18 @@ inline bool LockFreeStack<T>::Pop(T* data)
 			return false;
 		};
 
-		long long next_cnt = (old_top >> dfADDRESS_BIT) + 1;
+		unsigned long long next_cnt = (old_top >> dfADDRESS_BIT) + 1;
 		next = old_top_addr->next;
 
-		new_top = (Node*)((long long)next | (next_cnt << dfADDRESS_BIT));
+		new_top = (Node*)((unsigned long long)next | (next_cnt << dfADDRESS_BIT));
 
-		if (old_top == (long long)InterlockedCompareExchangePointer((PVOID*)&_top, (PVOID)new_top, (PVOID)old_top))
+		if (old_top == (unsigned long long)InterlockedCompareExchangePointer((PVOID*)&_top, (PVOID)new_top, (PVOID)old_top))
 		{
+			InterlockedDecrement(&_size);
 			*data = old_top_addr->data;
-			old_top_addr->del_cnt--;
-			if (old_top_addr->del_cnt == -2)
-				int a = 0;
+			
 			_pool->Free(old_top_addr);
 
-			InterlockedDecrement(&_size);
 			break;
 		}
 	}

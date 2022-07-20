@@ -16,6 +16,11 @@ public:
 
 	bool used;
 	unsigned int session_id;
+	
+	OVERLAPPED recv_overlapped;
+	OVERLAPPED send_overlapped;
+	RingBuffer recv_q = RingBuffer(2000);
+	LockFreeQueue<CPacket*> send_q = LockFreeQueue<CPacket*>(0);
 
 	// interlock
 	alignas(64) SOCKET sock;
@@ -25,11 +30,6 @@ public:
 	alignas(64) int send_packet_cnt;  // Send에 넣은 Packet 객체 삭제에 필요
 	alignas(64) int b;
 
-	RingBuffer recv_q = RingBuffer(2000);
-	LockFreeQueue<CPacket*> send_q;
-	
-	OVERLAPPED recv_overlapped;
-	OVERLAPPED send_overlapped;
 	wchar_t ip[16];
 	unsigned short port;
 	CRITICAL_SECTION session_cs;
