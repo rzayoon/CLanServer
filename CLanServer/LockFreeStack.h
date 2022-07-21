@@ -38,6 +38,7 @@ private:
 
 	alignas(64) Node* _top;
 	alignas(64) ULONG64 _size;
+	alignas(64) char b;
 
 	LockFreePool<Node> *_pool;
 

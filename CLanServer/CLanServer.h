@@ -66,11 +66,11 @@ private:
 	void RunIoThread();
 
 
-	__inline bool RecvPost(Session* session);
-	__inline bool SendPost(Session* session);
+	bool RecvPost(Session* session);
+	bool SendPost(Session* session);
 
-	__inline int UpdateIOCount(Session* session);
-	__inline void ReleaseSession(unsigned int session_id);
+	int UpdateIOCount(Session* session);
+	void ReleaseSession(unsigned int session_id);
 
 	bool exit_flag = false;
 	bool isRunning = false;
@@ -82,5 +82,6 @@ private:
 	Tracer tracer;
 
 	alignas(64) int session_cnt = 0;
+	alignas(64) char b;
 };
 

@@ -88,7 +88,7 @@ protected:
 	bool placement_new;
 	alignas(64) unsigned int use_count;
 	alignas(64) unsigned int capacity;
-
+	alignas(64) char b;
 };
 
 template<class DATA>

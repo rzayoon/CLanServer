@@ -90,6 +90,6 @@ private:
 	alignas(64) LONG ___cnt;
 	alignas(64) LONG fault_session;
 	alignas(64) LONG no_session;
-
+	alignas(64) char b;
 	LARGE_INTEGER frq;
 };

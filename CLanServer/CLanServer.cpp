@@ -90,7 +90,7 @@ void CLanServer::Stop()
 	return;
 }
 
-int CLanServer::GetSessionCount()
+inline int CLanServer::GetSessionCount()
 {
 	return session_cnt;
 }
@@ -112,7 +112,7 @@ unsigned long _stdcall CLanServer::IoThread(void* param)
 	return 0;
 }
 
-void CLanServer::RunAcceptThread()
+inline void CLanServer::RunAcceptThread()
 {
 	int retval;
 	wprintf(L"%d Accept thread On...\n", GetCurrentThreadId());
@@ -199,7 +199,7 @@ void CLanServer::RunAcceptThread()
 	}
 }
 
-void CLanServer::RunIoThread()
+inline void CLanServer::RunIoThread()
 {
 	int ret_gqcp;
 	DWORD thread_id = GetCurrentThreadId();
@@ -288,7 +288,6 @@ void CLanServer::RunIoThread()
 				QueryPerformanceCounter(&send_start);
 				monitor.UpdateSendPacket(cbTransferred);
 
-				CPacket* send_packet;
 				int packet_cnt = session->send_packet_cnt;
 
 				while (packet_cnt > 0)
@@ -314,6 +313,7 @@ void CLanServer::RunIoThread()
 
 	return;
 }
+
 
 bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 {
@@ -361,7 +361,7 @@ bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 	return ret;
 }
 
-void CLanServer::DisconnectSession(unsigned int session_id)
+inline void CLanServer::DisconnectSession(unsigned int session_id)
 {
 	Session* session = nullptr;
 
@@ -388,7 +388,7 @@ void CLanServer::DisconnectSession(unsigned int session_id)
 	return;
 }
 
-bool CLanServer::RecvPost(Session* session)
+inline bool CLanServer::RecvPost(Session* session)
 {
 	DWORD recvbytes, flags = 0;
 
@@ -435,14 +435,14 @@ bool CLanServer::RecvPost(Session* session)
 	return true;
 }
 
-bool CLanServer::SendPost(Session* session)
+inline bool CLanServer::SendPost(Session* session)
 {
 	bool temp;
 	LARGE_INTEGER start, end;
 
 	if ((temp = InterlockedExchange((LONG*)&session->send_flag, true)) == false)
 	{
-		int buf_cnt = session->send_q.GetSize();
+		long long buf_cnt = session->send_q.GetSize();
 		if (buf_cnt <= 0)
 		{
 			tracer.trace(77, session, session->session_id);
@@ -461,6 +461,7 @@ bool CLanServer::SendPost(Session* session)
 
 		CPacket* packet;
 		WSABUF wsabuf[MAX_WSABUF];
+		ZeroMemory(wsabuf, sizeof(wsabuf));
 
 		for (int cnt = 0; cnt < buf_cnt;)
 		{
@@ -510,7 +511,7 @@ bool CLanServer::SendPost(Session* session)
 	return temp;
 }
 
-int CLanServer::UpdateIOCount(Session* session)
+inline int CLanServer::UpdateIOCount(Session* session)
 {
 	int temp;
 	if ((temp = InterlockedDecrement((LONG*)&session->io_count)) == 0)
@@ -521,7 +522,7 @@ int CLanServer::UpdateIOCount(Session* session)
 	return temp;
 }
 
-void CLanServer::ReleaseSession(unsigned int session_id)
+inline void CLanServer::ReleaseSession(unsigned int session_id)
 {
 	Session* session;
 	unsigned long long flag;
