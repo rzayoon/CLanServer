@@ -91,7 +91,7 @@ void Monitor::UpdateSendPacket(LONG size)
 
 void Monitor::AddSendTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 {
-	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+	unsigned long long deltaTime = end->QuadPart - start->QuadPart;
 
 
 	InterlockedAdd64((LONG64*)&sendpost_time, deltaTime);
@@ -100,7 +100,7 @@ void Monitor::AddSendTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 
 void Monitor::AddRecvCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 {
-	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+	unsigned long long deltaTime = end->QuadPart - start->QuadPart;
 
 	
 	InterlockedAdd64((LONG64*)&recv_completion_time, deltaTime);
@@ -109,7 +109,7 @@ void Monitor::AddRecvCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 
 void Monitor::AddSendCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 {
-	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+	unsigned long long deltaTime = end->QuadPart - start->QuadPart;
 
 
 	InterlockedAdd64((LONG64*)&send_completion_time, deltaTime);
@@ -118,7 +118,7 @@ void Monitor::AddSendCompTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 
 void Monitor::AddOnRecvTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 {
-	double deltaTime = (double)(end->QuadPart - start->QuadPart) / frq.QuadPart * MEGA_ARG;
+	unsigned long long deltaTime = end->QuadPart - start->QuadPart;
 
 
 	InterlockedAdd64((LONG64*)&on_recv_time, deltaTime);
@@ -131,26 +131,28 @@ void Monitor::Show(int session_cnt)
 
 	int now_accept = InterlockedExchange(&accept, 0);
 	total_accept += now_accept;
-	double now_send_time = InterlockedExchange64((LONG64*)&sendpost_time, 0);
+	unsigned long long now_send_time = InterlockedExchange64((LONG64*)&sendpost_time, 0);
 	int now_send = InterlockedExchange(&send_per_sec, 0);
 	int now_recv = InterlockedExchange(&recv_per_sec, 0);
 	int now_send_packet = InterlockedExchange(&sendpacket_cnt, 0);
-	double now_recv_comp_time = InterlockedExchange64((LONG64*)&recv_completion_time, 0);
+	unsigned long long now_recv_comp_time = InterlockedExchange64((LONG64*)&recv_completion_time, 0);
 	int now_send_post_in_recv = InterlockedExchange(&sendpost_in_recv_cnt, 0);
-	double now_send_comp_time = InterlockedExchange64((LONG64*)&send_completion_time, 0);
+	unsigned long long now_send_comp_time = InterlockedExchange64((LONG64*)&send_completion_time, 0);
 	int rcv_cnt = InterlockedExchange(&recv_comp_cnt, 0);
 	int snd_cnt = InterlockedExchange(&send_comp_cnt, 0);
-	double now_on_recv_time = InterlockedExchange64((LONG64*)&on_recv_time, 0);
+	unsigned long long now_on_recv_time = InterlockedExchange64((LONG64*)&on_recv_time, 0);
 	int on_rcv_cnt = InterlockedExchange(&on_recv_cnt, 0);
 
+	double total_wsa = (double)now_send_time / frq.QuadPart * MEGA_ARG;
+
 	double send_time_avg = 0;
-	if (now_send != 0) send_time_avg = now_send_time / now_send;
+	if (now_send != 0) send_time_avg = (double)now_send_time / now_send / frq.QuadPart * MEGA_ARG;
 	double recv_comp_time_avg = 0;
-	if (rcv_cnt != 0) recv_comp_time_avg = now_recv_comp_time / rcv_cnt;
+	if (rcv_cnt != 0) recv_comp_time_avg = (double)now_recv_comp_time / rcv_cnt / frq.QuadPart * MEGA_ARG;
 	double send_comp_time_avg = 0;
-	if (snd_cnt != 0) send_comp_time_avg = now_send_comp_time / snd_cnt;
+	if (snd_cnt != 0) send_comp_time_avg = (double)now_send_comp_time / snd_cnt / frq.QuadPart * MEGA_ARG;
 	double on_recv_time_avg = 0;
-	if (on_rcv_cnt != 0) on_recv_time_avg = now_on_recv_time / on_rcv_cnt;
+	if (on_rcv_cnt != 0) on_recv_time_avg = (double)now_on_recv_time / on_rcv_cnt / frq.QuadPart * MEGA_ARG;
 
 	int max_thread_one_session = InterlockedExchange(&MaxThreadOneSession, 0);
 	int max_io_cnt = InterlockedExchange(&MaxIOCount, 0);
@@ -192,7 +194,7 @@ void Monitor::Show(int session_cnt)
 		, send_comp_time_avg
 		, max_packet, min_packet, _min_cnt, avg_packet
 		, now_recv, recv_comp_time_avg, now_send_post_in_recv, on_recv_time_avg
-		, now_send_time, send_time_avg, max_thread_one_session, max_io_cnt, fault_session, no_session);
+		, total_wsa, send_time_avg, max_thread_one_session, max_io_cnt, fault_session, no_session);
 
 
 	return;
