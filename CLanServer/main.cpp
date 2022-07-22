@@ -1,4 +1,14 @@
+
+#pragma comment(lib, "ws2_32")
+#pragma comment(lib, "winmm")
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+
+#include <Windows.h>
+
+#include <conio.h>
 #include "EchoServer.h"
+
 
 
 
@@ -14,9 +24,30 @@ int main()
 
 	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 100);
 
-	Sleep(INFINITE);
+	ULONGLONG oldTick = GetTickCount64();
+	while (1)
+	{
+		if (_kbhit())
+		{
+			wchar_t input;
+			input = _getwch();
 
+			if (input == L'q' || input == L'Q')
+			{
 
+				server.Stop();
+
+				break;
+			}
+		}
+
+		ULONGLONG term = GetTickCount64() - oldTick;
+		Sleep(1000 - term);
+		oldTick = GetTickCount64();
+
+		server.Show();
+
+	}
 
 	return 0;
 }

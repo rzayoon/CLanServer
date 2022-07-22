@@ -45,6 +45,7 @@ public:
 
 	virtual void OnError(int errorcode, const wchar_t* msg) = 0;
 	
+	void Show();
 
 private:
 

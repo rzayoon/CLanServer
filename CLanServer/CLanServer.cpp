@@ -11,6 +11,8 @@
 #include "Protocol.h"
 
 
+long long packet_counter[101];
+
 
 bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client)
 {
@@ -70,6 +72,42 @@ void CLanServer::Stop()
 
 	// 종료 메시지 
 	// PostQueuedCompletionStatus 0 0 0
+	
+	SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+	if (sock == INVALID_SOCKET)
+	{
+		wprintf(L"exit socket fail\n");
+	}
+
+	SOCKADDR_IN serveraddr;
+	ZeroMemory(&serveraddr, sizeof(serveraddr));
+	serveraddr.sin_family = AF_INET;
+	wchar_t ip[16] = L"127.0.0.1";  //loop back
+
+	InetPtonW(AF_INET, ip, &serveraddr.sin_addr.s_addr);
+
+	serveraddr.sin_port = htons(_port);
+
+
+	int ret_con = connect(sock, (sockaddr*)&serveraddr, sizeof(serveraddr));
+	if (ret_con == SOCKET_ERROR)
+	{
+		DWORD error_code = WSAGetLastError();
+		wprintf(L"exit connect fail %d\n", error_code);
+	}
+
+	closesocket(sock);
+
+	for (int i = 0; i < _max_client; i++)
+	{
+		if (session_arr[i].used == true)
+		{
+			DisconnectSession(session_arr[i].session_id);
+		}
+	}
+
+	wprintf(L"Disconnected all session\n");
+
 	HANDLE* hExit = new HANDLE[num_of_worker + 1];
 
 	for (int i = 0; i < num_of_worker; i++)
@@ -79,8 +117,11 @@ void CLanServer::Stop()
 	delete[] hWorkerThread;
 	hExit[num_of_worker] = hAcceptThread;
 
+	for (int i = 0; i < num_of_worker; i++)
+		PostQueuedCompletionStatus(hcp, 0, 0, 0);
+
+
 	WaitForMultipleObjects(num_of_worker + 1, hExit, TRUE, INFINITE);
-	// interval 마다 확인하기?
 
 	delete[] hExit;
 	delete[] session_arr;
@@ -99,7 +140,9 @@ unsigned long _stdcall CLanServer::AcceptThread(void* param)
 {
 	CLanServer* server = (CLanServer*)param;
 	server->RunAcceptThread();
-	// this call이나 server-> 콜이나 그게 그거지만 편의상.. 
+	// this call이나 server-> 콜이나 mov 2회지만 코딩 편의상
+	// mov reg1 [this]/[server(지역주소)]
+	// mov reg2 [reg1]
 
 	return 0;
 }
@@ -570,3 +613,8 @@ inline void CLanServer::ReleaseSession(unsigned int session_id)
 	return;
 }
 
+void CLanServer::Show()
+{
+	monitor.Show(session_cnt);
+	return;
+}
