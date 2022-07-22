@@ -23,6 +23,7 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 	_max_client = max_client;
 	wcscpy_s(_ip, ip);
 	_port = port;
+	exit_flag = false;
 
 	session_arr = new Session[_max_client];
 	WSADATA wsa;
@@ -59,7 +60,9 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 	}
 
 
-	return false;
+	isRunning = true;
+
+	return true;
 }
 
 void CLanServer::Stop()
@@ -88,7 +91,7 @@ void CLanServer::Stop()
 
 	serveraddr.sin_port = htons(_port);
 
-
+	exit_flag = true;
 	int ret_con = connect(sock, (sockaddr*)&serveraddr, sizeof(serveraddr));
 	if (ret_con == SOCKET_ERROR)
 	{
@@ -128,6 +131,9 @@ void CLanServer::Stop()
 
 	WSACleanup();
 
+	isRunning = false;
+	
+
 	return;
 }
 
@@ -139,26 +145,28 @@ inline int CLanServer::GetSessionCount()
 unsigned long _stdcall CLanServer::AcceptThread(void* param)
 {
 	CLanServer* server = (CLanServer*)param;
+	wprintf(L"%d Accept thread On...\n", GetCurrentThreadId());
 	server->RunAcceptThread();
 	// this call이나 server-> 콜이나 mov 2회지만 코딩 편의상
 	// mov reg1 [this]/[server(지역주소)]
 	// mov reg2 [reg1]
-
+	wprintf(L"%d Accept thread end\n", GetCurrentThreadId());
 	return 0;
 }
 
 unsigned long _stdcall CLanServer::IoThread(void* param)
 {
 	CLanServer* server = (CLanServer*)param;
+	wprintf(L"%d worker thread On...\n", GetCurrentThreadId());
 	server->RunIoThread();
-
+	wprintf(L"%d IO thread end\n", GetCurrentThreadId());
 	return 0;
 }
 
 inline void CLanServer::RunAcceptThread()
 {
 	int retval;
-	wprintf(L"%d Accept thread On...\n", GetCurrentThreadId());
+	
 	SOCKET listen_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if (listen_sock == INVALID_SOCKET) {
 		OnError(4, L"Listen socket()\n");
@@ -252,7 +260,7 @@ inline void CLanServer::RunIoThread()
 	LARGE_INTEGER on_recv_st, on_recv_ed;
 	DWORD error_code;
 
-	wprintf(L"%d worker thread On...\n", thread_id);
+	
 
 	while (1)
 	{
@@ -263,7 +271,7 @@ inline void CLanServer::RunIoThread()
 
 		if (overlapped == NULL) // deque 실패 1. timeout 2. 잘못 호출(Invalid handle) 3. 임의로 queueing 한 것(PostQueue)
 		{
-			wprintf(L"%d exit worker thread [error : %d]\n", thread_id, WSAGetLastError());
+			wprintf(L"%d NULL overlapped [error : %d]\n", thread_id, WSAGetLastError());
 			break;
 		}
 

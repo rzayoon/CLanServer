@@ -49,5 +49,8 @@ int main()
 
 	}
 
+	wprintf(L"Fine Closing\n");
+	Sleep(1000);
+
 	return 0;
 }
