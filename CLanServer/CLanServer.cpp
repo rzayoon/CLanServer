@@ -208,6 +208,8 @@ inline void CLanServer::RunAcceptThread()
 		InetNtopW(AF_INET, &clientaddr.sin_addr, temp_ip, _countof(temp_ip));
 		temp_port = ntohs(clientaddr.sin_port);
 
+		tracer.trace(70, 0, client_sock);
+
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
 			
@@ -288,7 +290,10 @@ inline void CLanServer::RunIoThread()
 	
 			SOCKET temp_sock = InterlockedExchange(&session->sock, INVALID_SOCKET);
 			if (temp_sock != INVALID_SOCKET)
+			{
 				closesocket(temp_sock);
+				tracer.trace(71, session, temp_sock);
+			}
 		}
 		else {
 			OnWorkerThreadBegin();
@@ -443,6 +448,7 @@ inline bool CLanServer::RecvPost(Session* session)
 {
 	DWORD recvbytes, flags = 0;
 
+	int temp = InterlockedIncrement((LONG*)&session->io_count);
 	ZeroMemory(&session->recv_overlapped, sizeof(session->recv_overlapped));
 
 	int emptySize = session->recv_q.GetEmptySize();
@@ -460,12 +466,13 @@ inline bool CLanServer::RecvPost(Session* session)
 		wsabuf[1].len = emptySize - size1;
 	}
 
-	int temp = InterlockedIncrement((LONG*)&session->io_count);
 	monitor.UpdateMaxIOCount(temp);
 
+	DWORD socket = session->sock;
 
 	DWORD error_code;
-	int retval = WSARecv(session->sock, wsabuf, cnt, &recvbytes, &flags, &session->recv_overlapped, NULL);
+
+	int retval = WSARecv(socket, wsabuf, cnt, &recvbytes, &flags, &session->recv_overlapped, NULL);
 	if (retval == SOCKET_ERROR)
 	{
 		if ((error_code = WSAGetLastError()) != ERROR_IO_PENDING)
@@ -475,11 +482,13 @@ inline bool CLanServer::RecvPost(Session* session)
 		}
 		else
 		{
+			tracer.trace(73, session, socket);
 			// Pending
 		}
 	}
 	else
 	{
+		tracer.trace(73, session, socket);
 		//동기 recv
 	}
 
@@ -500,10 +509,10 @@ inline bool CLanServer::SendPost(Session* session)
 			session->send_flag = false;
 			return true;
 		}
+		int temp = InterlockedIncrement((LONG*)&session->io_count);
 
 		int retval;
 
-		int temp = InterlockedIncrement((LONG*)&session->io_count);
 		ZeroMemory(&session->send_overlapped, sizeof(session->send_overlapped));
 
 		// 개선 필요
@@ -530,13 +539,14 @@ inline bool CLanServer::SendPost(Session* session)
 		DWORD sendbytes;
 		monitor.UpdateMaxIOCount(temp);
 		monitor.IncSend();
-
-		tracer.trace(33, session, session->session_id);
+;
+		DWORD socket = session->sock;
 
 		QueryPerformanceCounter(&start);
-		retval = WSASend(session->sock, wsabuf, buf_cnt, &sendbytes, 0, &session->send_overlapped, NULL);
+		retval = WSASend(socket, wsabuf, buf_cnt, &sendbytes, 0, &session->send_overlapped, NULL);
 		QueryPerformanceCounter(&end);
 		monitor.AddSendTime(&start, &end);
+
 
 		DWORD error_code;
 		if (retval == SOCKET_ERROR)
@@ -549,6 +559,7 @@ inline bool CLanServer::SendPost(Session* session)
 			}
 			else
 			{
+				tracer.trace(72, session, socket);
 				// Pending
 			}
 		}
