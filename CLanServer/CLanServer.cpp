@@ -25,7 +25,7 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 	_port = port;
 	exit_flag = false;
 
-	session_arr = new Session[_max_client];
+	//session_arr = new Session[_max_client];
 	WSADATA wsa;
 
 	if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
@@ -127,7 +127,7 @@ void CLanServer::Stop()
 	WaitForMultipleObjects(num_of_worker + 1, hExit, TRUE, INFINITE);
 
 	delete[] hExit;
-	delete[] session_arr;
+	//delete[] session_arr;
 
 	WSACleanup();
 
@@ -243,7 +243,7 @@ inline void CLanServer::RunAcceptThread()
 					// RecvPost()
 					if (RecvPost(session))
 					{
-						OnClientJoin(session->session_id);
+						//OnClientJoin(session->session_id);
 					}
 					break;
 				}
@@ -282,7 +282,7 @@ inline void CLanServer::RunIoThread()
 			//에러코드 로깅
 			error_code = GetLastError();
 			if (error_code != ERROR_NETNAME_DELETED)
-				tracer.trace(00, NULL, error_code);
+				tracer.trace(00, session, error_code);
 		}
 
 		if (cbTransferred == 0) // Pending 후 I/O 처리 실패
@@ -478,7 +478,7 @@ inline bool CLanServer::RecvPost(Session* session)
 		if ((error_code = WSAGetLastError()) != ERROR_IO_PENDING)
 		{ // 요청이 실패
 			int io_temp = UpdateIOCount(session);
-			tracer.trace(1, session, error_code);
+			tracer.trace(1, session, error_code, socket);
 		}
 		else
 		{
@@ -555,7 +555,7 @@ inline bool CLanServer::SendPost(Session* session)
 			{
 				// 내가 release 시켜야하는 경우 Packet 해제 해줘야 함
 				int io_temp = UpdateIOCount(session);
-				tracer.trace(2, session, error_code);
+				tracer.trace(2, session, error_code, socket);
 			}
 			else
 			{
@@ -599,7 +599,10 @@ inline void CLanServer::ReleaseSession(unsigned int session_id)
 
 			flag = *((unsigned long long*)(&session->io_count));
 			if (flag != 0) break;
-			if (InterlockedCompareExchange64((LONG64*)&session->io_count, 0x100000000, flag) == flag) {
+			if (InterlockedCompareExchange64((LONG64*)&session->io_count, 0x100000000, flag) == flag) 
+			{
+				
+				tracer.trace(75, session, session_id, session->sock);
 				session->session_id = -1;
 
 				CPacket* packet;

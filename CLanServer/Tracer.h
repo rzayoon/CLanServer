@@ -15,6 +15,7 @@ class Tracer
 		char act;
 		PVOID session;
 		long long info;
+		long long info2;
 	};
 public:
 	Tracer()
@@ -25,7 +26,7 @@ public:
 	~Tracer()
 	{
 	}
-	void trace(char code, PVOID session, long long value = 0);
+	void trace(char code, PVOID session, long long value = 0, long long value2 = 0);
 
 	void Crash();
 private:
