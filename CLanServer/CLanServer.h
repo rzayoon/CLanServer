@@ -76,7 +76,7 @@ private:
 	bool exit_flag = false;
 	bool isRunning = false;
 
-	Session session_arr[200];
+	Session session_arr[500];
 	DWORD session_id = 1;
 	
 	Monitor monitor;

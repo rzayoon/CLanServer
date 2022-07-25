@@ -22,7 +22,7 @@ int main()
 
 	
 
-	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 200);
+	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 500);
 
 	ULONGLONG oldTick = GetTickCount64();
 	while (1)
@@ -50,7 +50,7 @@ int main()
 	}
 
 	wprintf(L"Fine Closing\n");
-	Sleep(1000);
+	Sleep(5000);
 
 	return 0;
 }

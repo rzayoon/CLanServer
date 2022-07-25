@@ -15,10 +15,14 @@ public:
 	void Unlock();
 
 	bool used;
+	bool disconnect;
 	unsigned int session_id;
 	
+
 	OVERLAPPED recv_overlapped;
+	SOCKET recv_sock;
 	OVERLAPPED send_overlapped;
+	SOCKET send_sock;
 	RingBuffer recv_q = RingBuffer(2000);
 	LockFreeQueue<CPacket*> send_q = LockFreeQueue<CPacket*>(0);
 

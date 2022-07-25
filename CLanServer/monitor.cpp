@@ -180,7 +180,6 @@ void Monitor::Show(int session_cnt)
 		" > Packet avg : %.1lf\n"
 		"RECV/sec : %d\n"
 		"Recv Completion : %.2lf us\n"
-		" > Send Post : %d\n"
 		" > OnRecv : %.2lf us\n"
 		"----------------------------------\n"
 		"Total WSASend Time : %.2lf us\n"
@@ -193,7 +192,7 @@ void Monitor::Show(int session_cnt)
 		total_accept, now_accept, accept_err, session_cnt, now_send, now_send_packet
 		, send_comp_time_avg
 		, max_packet, min_packet, _min_cnt, avg_packet
-		, now_recv, recv_comp_time_avg, now_send_post_in_recv, on_recv_time_avg
+		, now_recv, recv_comp_time_avg, on_recv_time_avg
 		, total_wsa, send_time_avg, max_thread_one_session, max_io_cnt, fault_session, no_session);
 
 
