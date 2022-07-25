@@ -22,7 +22,7 @@ int main()
 
 	
 
-	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 500);
+	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 80);
 
 	ULONGLONG oldTick = GetTickCount64();
 	while (1)

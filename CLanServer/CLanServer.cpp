@@ -209,10 +209,10 @@ inline void CLanServer::RunAcceptThread()
 		temp_port = ntohs(clientaddr.sin_port);
 
 		tracer.trace(70, 0, client_sock);
-
+		
+		bool check = false;
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
-			
 			for (int idx = 0; idx < _max_client; idx++)
 			{
 				if (session_arr[idx].used == false)
@@ -241,7 +241,7 @@ inline void CLanServer::RunAcceptThread()
 					monitor.IncAccept();
 
 					InterlockedIncrement((LONG*)&session_cnt);
-
+					check = true;
 
 					// RecvPost()
 					if (RecvPost(session))
@@ -251,6 +251,12 @@ inline void CLanServer::RunAcceptThread()
 					break;
 				}
 			}
+			if (!check)
+				log_arr[8]++;
+		}
+		else
+		{
+			closesocket(client_sock);
 		}
 	}
 }
