@@ -163,6 +163,7 @@
     <ClInclude Include="LockFreePool.h" />
     <ClInclude Include="LockFreeQueue.h" />
     <ClInclude Include="LockFreeStack.h" />
+    <ClInclude Include="MemoryPoolTls.h" />
     <ClInclude Include="monitor.h" />
     <ClInclude Include="Protocol.h" />
     <ClInclude Include="RingBuffer.h" />

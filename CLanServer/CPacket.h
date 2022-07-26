@@ -3,9 +3,13 @@
 #include <Windows.h>
 
 #include "LockFreePool.h"
-
+#include "MemoryPoolTls.h"
 
 #define AUTO_PACKET
+
+
+
+
 
 
 class CPacket
@@ -18,7 +22,7 @@ public:
 
 	friend class CLanServer;
 	friend class PacketPtr;
-	friend class LockFreePool<CPacket>;
+	friend class MemoryPoolTls<CPacket>;
 private:	
 
 
@@ -36,7 +40,11 @@ public:
 	/// <param name=""></param>
 	inline void Release(void);
 
-	
+	/// <summary>
+	/// 패킷 청소
+	/// </summary>
+	/// <param name=""></param>
+	inline void Clear(void);
 
 	/// <summary>
 	/// 버퍼 사이즈
@@ -145,13 +153,8 @@ protected:
 
 	char* GetBufferPtrWithHeader(void);
 	int GetDataSizeWithHeader(void);
-	/// <summary>
-	/// 패킷 청소
-	/// </summary>
-	/// <param name=""></param>
-	inline void Clear(void);
 
-	inline static LockFreePool<CPacket> packet_pool = LockFreePool<CPacket>(0);
+	inline static MemoryPoolTls<CPacket> packet_pool = MemoryPoolTls<CPacket>(1000);
 
 	char* buffer;
 	char* hidden_buf;
@@ -202,7 +205,7 @@ public:
 		if (packet)
 			packet->SubRef();
 		packet = src.packet;
-		if(packet)
+		if (packet)
 			packet->AddRef();
 
 		return *this;
