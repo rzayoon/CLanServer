@@ -12,16 +12,9 @@
 template <class DATA>
 class LockFreePool
 {
-	enum
-	{
-		PAD = 0xABCDABCDABCDABCD
-	};
-
 	struct BLOCK_NODE
 	{
-		unsigned long long front_pad;
 		DATA data;
-		unsigned long long back_pad;
 		BLOCK_NODE* next;
 	
 
@@ -79,7 +72,7 @@ protected:
 	void Crash()
 	{
 		int* a = (int*)0;
-		a = 0;
+		*a = 0;
 
 	}
 
@@ -111,8 +104,6 @@ LockFreePool<DATA>::LockFreePool(int _capacity, bool _placement_new)
 		for (unsigned int i = 0; i < capacity; i++)
 		{
 			BLOCK_NODE* temp = (BLOCK_NODE*)malloc(sizeof(BLOCK_NODE));
-			temp->front_pad = PAD;
-			temp->back_pad = PAD;
 
 			temp->next = top;
 			top = temp;
@@ -123,8 +114,6 @@ LockFreePool<DATA>::LockFreePool(int _capacity, bool _placement_new)
 		for (unsigned int i = 0; i < capacity; i++)
 		{
 			BLOCK_NODE* temp = new BLOCK_NODE;
-			temp->front_pad = PAD;
-			temp->back_pad = PAD;
 
 			temp->next = top;
 			top = temp;
@@ -184,14 +173,10 @@ DATA* LockFreePool<DATA>::Alloc()
 			if (placement_new)
 			{
 				old_top_addr = (BLOCK_NODE*)malloc(sizeof(BLOCK_NODE));
-				old_top_addr->front_pad = PAD;
-				old_top_addr->back_pad = PAD;
 			}
 			else
 			{
 				old_top_addr = new BLOCK_NODE;
-				old_top_addr->front_pad = PAD;
-				old_top_addr->back_pad = PAD;
 			}
 		
 			break;
@@ -228,7 +213,7 @@ bool LockFreePool<DATA>::Free(DATA* data)
 {
 	unsigned long long old_top;
 	// data가 8바이트 초과하면 문제될 수 있음 구조체 패딩 관련
-	BLOCK_NODE* node = (BLOCK_NODE*)((char*)data - sizeof(BLOCK_NODE::front_pad)); 
+	BLOCK_NODE* node = (BLOCK_NODE*)data; 
 	BLOCK_NODE* old_top_addr;
 	PVOID new_top;
 
@@ -237,11 +222,6 @@ bool LockFreePool<DATA>::Free(DATA* data)
 		data->~DATA();
 	}
 
-	if (node->front_pad != PAD || node->back_pad != PAD) // 사용 중에 버퍼 오버런 있었는지 체크용
-	{
-		Crash();
-	}
-	
 
 
 	while (1)

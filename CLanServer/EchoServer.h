@@ -7,7 +7,12 @@ class EchoServer : public CLanServer
 	void OnClientJoin(unsigned int session_id/**/);
 	void OnClientLeave();
 
+#ifdef AUTO_PACKET
+	void OnRecv(unsigned int session_id, PacketPtr packet);
+#else
 	void OnRecv(unsigned int session_id, CPacket* packet);
+#endif
+
 	void OnSend(unsigned int session_id, int send_size);
 
 	void OnWorkerThreadBegin();

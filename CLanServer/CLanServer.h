@@ -7,6 +7,7 @@
 #include "monitor.h"
 
 
+
 class CLanServer
 {
 	enum {
@@ -29,15 +30,22 @@ public:
 	bool Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client);
 	void Stop();
 
-	bool SendPacket(unsigned int session_id, CPacket* packet);
 	void DisconnectSession(unsigned int session_id);
 	int GetSessionCount();
+
+
+#ifdef AUTO_PACKET
+	bool SendPacket(unsigned int session_id, PacketPtr packet);
+	virtual void OnRecv(unsigned int session_id, PacketPtr packet) = 0;
+#else
+	bool SendPacket(unsigned int session_id, CPacket* packet);
+	virtual void OnRecv(unsigned int session_id, CPacket* packet) = 0;
+#endif
 
 	virtual bool OnConnectionRequest(wchar_t* ip, unsigned short port) = 0;
 	virtual void OnClientJoin(unsigned int session_id/**/) = 0;
 	virtual void OnClientLeave() = 0;
-
-	virtual void OnRecv(unsigned int session_id, CPacket* packet) = 0;
+	
 	virtual void OnSend(unsigned int session_id, int send_size) = 0;
 
 	virtual void OnWorkerThreadBegin() = 0;

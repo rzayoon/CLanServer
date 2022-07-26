@@ -9,10 +9,15 @@ bool EchoServer::OnConnectionRequest(wchar_t* ip, unsigned short port) // »≠¿Ã∆Æ
 
 void EchoServer::OnClientJoin(unsigned int session_id)
 {
-	CPacket* packet = new CPacket;
-
 	__int64 data = 0x7fffffffffffffff;
+
+#ifdef AUTO_PACKET
+	PacketPtr packet = CPacket::Alloc();
+	*(*packet) << data;
+#else
+	CPacket* packet = new CPacket;
 	*packet << data;
+#endif
 
 	SendPacket(session_id, packet);
 }
@@ -22,6 +27,20 @@ void EchoServer::OnClientLeave()
 
 }
 
+#ifdef AUTO_PACKET
+void EchoServer::OnRecv(unsigned int session_id, PacketPtr packet)
+{
+	__int64 echo;
+	*(*packet) >> echo;
+
+	PacketPtr send_packet = CPacket::Alloc();
+	*(*send_packet) << echo;
+
+	SendPacket(session_id, send_packet);
+
+	return;
+}
+#else
 void EchoServer::OnRecv(unsigned int session_id, CPacket* packet)
 {
 	__int64 echo;
@@ -34,6 +53,8 @@ void EchoServer::OnRecv(unsigned int session_id, CPacket* packet)
 
 	return;
 }
+#endif
+
 
 void EchoServer::OnSend(unsigned int session_id, int send_size)
 {

@@ -24,7 +24,11 @@ public:
 	OVERLAPPED send_overlapped;
 	SOCKET send_sock;
 	RingBuffer recv_q = RingBuffer(2000);
+#ifdef AUTO_PACKET
+	LockFreeQueue<PacketPtr> send_q = LockFreeQueue<PacketPtr>(0, TRUE);
+#else
 	LockFreeQueue<CPacket*> send_q = LockFreeQueue<CPacket*>(0);
+#endif
 
 	// interlock
 	alignas(64) SOCKET sock;
@@ -38,6 +42,10 @@ public:
 	unsigned short port;
 	CRITICAL_SECTION session_cs;
 
+#ifdef AUTO_PACKET
+	PacketPtr temp_packet[200];
+#else
 	CPacket* temp_packet[200];
+#endif
 
 };

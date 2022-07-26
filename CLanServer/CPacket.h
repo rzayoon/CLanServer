@@ -2,6 +2,12 @@
 
 #include <Windows.h>
 
+#include "LockFreePool.h"
+
+
+#define AUTO_PACKET
+
+
 class CPacket
 {
 public:
@@ -11,24 +17,26 @@ public:
 	};
 
 	friend class CLanServer;
-	
+	friend class PacketPtr;
+	friend class LockFreePool<CPacket>;
+private:	
+
+
 	CPacket(int size = eBUFFER_DEFAULT);
 	
 	CPacket(CPacket& src);
 
 	virtual ~CPacket();
 
+
+public:
 	/// <summary>
 	/// 패킷 파괴
 	/// </summary>
 	/// <param name=""></param>
 	inline void Release(void);
 
-	/// <summary>
-	/// 패킷 청소
-	/// </summary>
-	/// <param name=""></param>
-	inline void Clear(void);
+	
 
 	/// <summary>
 	/// 버퍼 사이즈
@@ -108,19 +116,106 @@ public:
 	int GetData(char* dest, int size);
 	int PutData(char* src, int size);
 
+	inline static CPacket* Alloc()
+	{
+		CPacket* packet = packet_pool.Alloc();
+		packet->Clear();
+		return packet;
+	}
+
+	inline void AddRef()
+	{
+		InterlockedIncrement((LONG*)&ref_cnt);
+		return;
+	}
+
+	/// <summary>
+	/// subref 이후에는 바로 다른 스레드에서 사용할 여지가 있으므로 
+	/// 건드리지 않는다.
+	/// </summary>
+	inline void SubRef()
+	{
+		int temp_cnt = InterlockedDecrement((LONG*)&ref_cnt);
+		if (temp_cnt == 0)
+			CPacket::packet_pool.Free(this);
+		return;
+	}
 
 protected:
 
 	char* GetBufferPtrWithHeader(void);
 	int GetDataSizeWithHeader(void);
+	/// <summary>
+	/// 패킷 청소
+	/// </summary>
+	/// <param name=""></param>
+	inline void Clear(void);
+
+	inline static LockFreePool<CPacket> packet_pool = LockFreePool<CPacket>(0);
 
 	char* buffer;
 	char* hidden_buf;
 	int write_pos;
 	int read_pos;
 
-
 	int buffer_size;
 	int data_size;
+	alignas(64) int ref_cnt;
+
 };
 
+
+class PacketPtr
+{
+
+public:
+	PacketPtr()
+	{
+		packet = nullptr;
+	}
+
+	PacketPtr(CPacket* new_packet)
+	{
+		packet = new_packet;
+		packet->AddRef();
+	}
+
+	PacketPtr(PacketPtr& src)
+	{
+		packet = src.packet;
+		if(packet)
+			packet->AddRef();
+	}
+
+
+	~PacketPtr()
+	{
+		if (packet != nullptr)
+		{
+			packet->SubRef();
+			packet = nullptr;
+		}
+	}
+
+	PacketPtr& operator=(PacketPtr& src)
+	{
+		if (packet)
+			packet->SubRef();
+		packet = src.packet;
+		if(packet)
+			packet->AddRef();
+
+		return *this;
+	}
+
+	CPacket* operator*()
+	{
+		return packet;
+	}
+
+
+private:
+
+	CPacket* packet;
+
+};

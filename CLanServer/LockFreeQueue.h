@@ -29,7 +29,7 @@ class LockFreeQueue
 
 public:
 
-	LockFreeQueue(unsigned int size = 2000);
+	LockFreeQueue(unsigned int size = 2000, bool placement_new = false);
 	~LockFreeQueue();
 
 	bool Enqueue(T data);
@@ -49,10 +49,10 @@ private:
 };
 
 template<class T>
-inline LockFreeQueue<T>::LockFreeQueue(unsigned int size)
+inline LockFreeQueue<T>::LockFreeQueue(unsigned int size, bool placement_new)
 {
 	_size = 0;
-	_pool = new LockFreePool<Node>(size + 1);
+	_pool = new LockFreePool<Node>(size + 1, placement_new);
 	_head = _pool->Alloc();
 
 	_tail = _head;
@@ -120,6 +120,7 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 	Node* head;
 	Node* next;
 	unsigned long long next_cnt;
+	T empty_data;
 
 	while (true)
 	{
@@ -148,7 +149,7 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 			//    하지만 다른 스레드 때문에 해야할 일을 못하는 것은 락프리의 목적에 위배된다.
 			//    next가 null로 읽히면 1, 2의 상황 구분하지 않고 그냥 없는 것으로 본다..
 			InterlockedIncrement64(&_size);
-			*data = nullptr;
+			*data = empty_data;
 			return false;
 		}
 		else

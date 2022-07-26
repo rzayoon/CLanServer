@@ -210,14 +210,17 @@ inline void CLanServer::RunAcceptThread()
 
 		tracer.trace(70, 0, client_sock);
 		
-		bool check = false;
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
-			for (int idx = 0; idx < _max_client; idx++)
+			Session* session = nullptr;
+
+			while (!session)
 			{
-				if (session_arr[idx].used == false)
+				for (int idx = 0; idx < _max_client; idx++)
 				{
-					Session* session = &session_arr[idx];
+					if (session_arr[idx].used == true) continue;
+
+					session = &session_arr[idx];
 
 					session->session_id = session_id++;
 					session->sock = client_sock;
@@ -231,7 +234,7 @@ inline void CLanServer::RunAcceptThread()
 					session->recv_q.ClearBuffer();
 
 					CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
-					
+
 					session->release_flag = 0; // 준비 끝
 					session_arr[idx].used = true;
 
@@ -241,7 +244,7 @@ inline void CLanServer::RunAcceptThread()
 					monitor.IncAccept();
 
 					InterlockedIncrement((LONG*)&session_cnt);
-					check = true;
+
 
 					// RecvPost()
 					if (RecvPost(session))
@@ -249,12 +252,11 @@ inline void CLanServer::RunAcceptThread()
 						OnClientJoin(session->session_id);
 					}
 					break;
+
 				}
 			}
-			if (!check)
-				log_arr[8]++;
 		}
-		else
+		else // Connection Requeset 거부
 		{
 			closesocket(client_sock);
 		}
@@ -265,7 +267,6 @@ inline void CLanServer::RunIoThread()
 {
 	int ret_gqcp;
 	DWORD thread_id = GetCurrentThreadId();
-	CPacket packet;
 	LARGE_INTEGER recv_start, recv_end;
 	LARGE_INTEGER send_start, send_end;
 	LARGE_INTEGER on_recv_st, on_recv_ed;
@@ -325,16 +326,24 @@ inline void CLanServer::RunIoThread()
 
 					session->recv_q.MoveFront(sizeof(header));
 
-					packet.Clear();
-
-					int ret_deq = session->recv_q.Dequeue(packet.GetBufferPtr(), header.len);
-
-					packet.MoveWritePos(ret_deq);
-
+#ifdef AUTO_PACKET
+					PacketPtr packet = CPacket::Alloc();
+					int ret_deq = session->recv_q.Dequeue((*packet)->GetBufferPtr(), header.len);
+					(*packet)->MoveWritePos(ret_deq);
 					QueryPerformanceCounter(&on_recv_st);
-					OnRecv(session->session_id, &packet);
+					OnRecv(session->session_id, packet);
 					QueryPerformanceCounter(&on_recv_ed);
 					monitor.AddOnRecvTime(&on_recv_st, &on_recv_ed);
+#else
+
+
+
+
+#endif
+					
+
+
+
 				}
 				QueryPerformanceCounter(&recv_end);
 				monitor.AddRecvCompTime(&recv_start, &recv_end);
@@ -359,10 +368,12 @@ inline void CLanServer::RunIoThread()
 					log_arr[0]++;
 				}                                                                                                                                            
 
+#ifndef AUTO_PACKET
 				while (packet_cnt > 0)
 				{
 					delete session->temp_packet[--packet_cnt];
 				}
+#endif
 
 				session->send_packet_cnt = 0;
 				session->send_flag = false;
@@ -387,7 +398,50 @@ inline void CLanServer::RunIoThread()
 	return;
 }
 
+#ifdef AUTO_PACKET
+bool CLanServer::SendPacket(unsigned int session_id, PacketPtr packet)
+{
+	monitor.IncSendPacket();
+	bool ret = false;
+	Session* session = nullptr;
+	bool check = false; // 누수 체크용
 
+	for (int idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].used == false) continue;
+
+		if (session_arr[idx].session_id == session_id)
+		{
+			session = &session_arr[idx];
+			InterlockedIncrement((LONG*)&session->io_count);
+			if (session->release_flag == 0)
+			{
+				if (session->session_id == session_id)
+				{
+					session->send_q.Enqueue(packet);  // 64 bit 기준 8byte
+
+					SendPost(session);
+
+					check = true;
+				}
+				else
+				{
+					log_arr[5]++;
+				}
+			}
+			UpdateIOCount(session);
+			break;
+		}
+	}
+
+	if (!check)
+	{
+		monitor.IncNoSession();
+	}
+
+	return ret;
+}
+#else
 bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 {
 	monitor.IncSendPacket();
@@ -423,16 +477,15 @@ bool CLanServer::SendPacket(unsigned int session_id, CPacket* packet)
 		}
 	}
 
-
 	if (!check)
 	{
 		monitor.IncNoSession();
 	}
 
-
-
 	return ret;
 }
+#endif
+
 
 inline void CLanServer::DisconnectSession(unsigned int session_id)
 {
@@ -535,10 +588,24 @@ inline bool CLanServer::SendPost(Session* session)
 		if (buf_cnt > MAX_WSABUF)
 			buf_cnt = MAX_WSABUF;
 
-		CPacket* packet;
 		WSABUF wsabuf[MAX_WSABUF];
 		ZeroMemory(wsabuf, sizeof(wsabuf));
 
+#ifdef AUTO_PACKET
+		PacketPtr packet;
+		for (int cnt = 0; cnt < buf_cnt;)
+		{
+			if (session->send_q.Dequeue(&packet) == false) continue;
+			
+
+			wsabuf[cnt].buf = (*packet)->GetBufferPtrWithHeader();
+			wsabuf[cnt].len = (*packet)->GetDataSizeWithHeader();
+			session->temp_packet[cnt] = packet;
+
+			++cnt;
+		}
+#else
+		CPacket* packet;
 		for (int cnt = 0; cnt < buf_cnt;)
 		{
 			session->send_q.Dequeue(&packet);
@@ -551,6 +618,8 @@ inline bool CLanServer::SendPost(Session* session)
 
 			++cnt;
 		}
+#endif
+
 		session->send_packet_cnt = buf_cnt;
 		DWORD sendbytes;
 		monitor.UpdateMaxIOCount(temp);
@@ -626,6 +695,13 @@ inline void CLanServer::ReleaseSession(unsigned int session_id)
 				tracer.trace(75, session, session_id, session->sock);
 				session->session_id = -1;
 
+
+#ifdef AUTO_PACKET
+				PacketPtr packet;
+				while (session->send_q.Dequeue(&packet))
+				{
+				}
+#else
 				CPacket* packet;
 				while (session->send_q.Dequeue(&packet))
 				{
@@ -637,7 +713,7 @@ inline void CLanServer::ReleaseSession(unsigned int session_id)
 				{
 					delete session->temp_packet[--remain];
 				}
-
+#endif
 				
 				closesocket(session->sock);  
 				session->sock = INVALID_SOCKET;
