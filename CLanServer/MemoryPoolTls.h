@@ -1,6 +1,8 @@
 #pragma once
 #include <Windows.h>
+
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "LockFreeQueue.h"
 #include "LockFreeStack.h"
@@ -126,6 +128,7 @@ class MemoryPoolTls
 
 			return;
 		}
+
 		int GetSize()
 		{
 			return size;
@@ -213,7 +216,7 @@ public:
 		if (td_pool->size == 0) // 풀 다 쓴 경우
 		{
 			if (chunk_pool.Pop(&chunk_top))
-			{
+			{ // 가용 청크 가져옴
 				td_pool->top = chunk_top;
 				td_pool->size = default_size;
 
@@ -235,9 +238,6 @@ public:
 	bool Free(DATA* data)
 	{
 		if (data == nullptr) return false;
-
-		if ((long long)data < 0xFFFF) 
-			int a = 0;
 
 		THREAD_DATA* td = (THREAD_DATA*)TlsGetValue(tls_index);
 		if (td == nullptr)

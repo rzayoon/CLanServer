@@ -26,7 +26,7 @@ class LockFreeStack
 
 public:
 
-	LockFreeStack(unsigned int size = 10000);
+	LockFreeStack(unsigned int size = 10000, bool placement_new = false);
 	~LockFreeStack();
 
 	bool Push(T data);
@@ -38,16 +38,17 @@ private:
 
 	alignas(64) Node* _top;
 	alignas(64) ULONG64 _size;
-	alignas(64) char b;
+	alignas(64) bool _placement_new;
 	LockFreePool<Node> *_pool;
 
 };
 
 template<class T>
-inline LockFreeStack<T>::LockFreeStack(unsigned int size)
+inline LockFreeStack<T>::LockFreeStack(unsigned int size, bool placement_new)
 {
 	_size = 0;
 	_top = nullptr;
+	_placement_new = placement_new;
 	_pool = new LockFreePool<Node>(size);
 }
 
@@ -64,7 +65,12 @@ inline bool LockFreeStack<T>::Push(T data)
 	if (node == nullptr)
 		return false;
 
+
 	node->data = data;
+
+	if (_placement_new)
+		data.~T();
+
 
 	unsigned long long old_top;
 	Node* old_top_addr;
@@ -117,7 +123,8 @@ inline bool LockFreeStack<T>::Pop(T* data)
 		{
 			InterlockedDecrement(&_size);
 			*data = old_top_addr->data;
-			
+			if(_placement_new)
+				new(data) T;
 			_pool->Free(old_top_addr);
 
 			break;

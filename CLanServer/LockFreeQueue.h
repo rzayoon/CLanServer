@@ -29,7 +29,7 @@ class LockFreeQueue
 
 public:
 
-	LockFreeQueue(unsigned int size = 2000, bool placement_new = false);
+	LockFreeQueue(unsigned int size = 10000, bool placement_new = false);
 	~LockFreeQueue();
 
 	bool Enqueue(T data);
@@ -41,18 +41,17 @@ private:
 
 	alignas(64) Node* _tail;
 	alignas(64) Node* _head;
-
 	alignas(64) LONG64 _size;
-	alignas(64) char b;
 	LockFreePool<Node>* _pool;
-
+	bool _placement_new;
 };
 
 template<class T>
 inline LockFreeQueue<T>::LockFreeQueue(unsigned int size, bool placement_new)
 {
 	_size = 0;
-	_pool = new LockFreePool<Node>(size + 1, placement_new);
+	_placement_new = placement_new;
+	_pool = new LockFreePool<Node>(size + 1);
 	_head = _pool->Alloc();
 
 	_tail = _head;
@@ -74,8 +73,11 @@ inline bool LockFreeQueue<T>::Enqueue(T data)
 	Node* next = nullptr;
 	unsigned long long next_cnt;
 
+	new(&node->data) T;
+
 	node->data = data;
 	node->next = nullptr;
+
 	while (true)
 	{
 		old_tail = (unsigned long long)_tail;
@@ -131,7 +133,7 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 
 		next = head->next;
 
-	
+
 
 
 		if (next == nullptr)
@@ -155,18 +157,19 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 			unsigned long long old_tail = (unsigned long long)_tail;
 			if (old_head == old_tail) // cnt까지 일치하면 같은 것
 			{
-				Node* tail = (Node*)(old_tail & dfADDRESS_MASK); 
+				Node* tail = (Node*)(old_tail & dfADDRESS_MASK);
 				unsigned long long tail_cnt = (old_tail >> dfADDRESS_BIT) + 1;
 				Node* new_tail = (Node*)((unsigned long long)next | (tail_cnt << dfADDRESS_BIT));
 				InterlockedCompareExchangePointer((PVOID*)&_tail, new_tail, (PVOID)old_tail);
 			}
 
 			Node* new_head = (Node*)((unsigned long long)next | (next_cnt << dfADDRESS_BIT));
-			*data = next->data; 
+
+			*data = next->data;
 			// data가 객체인 경우.. 느려질 것 사용자의 문제. template type이 복사 비용이 적은 포인터나 일반 타입이었어야 한다.
 			if (InterlockedCompareExchangePointer((PVOID*)&_head, new_head, (PVOID)old_head) == (PVOID)old_head)
 			{
-
+				head->data.~T();
 				_pool->Free(head);
 				break;
 			}
