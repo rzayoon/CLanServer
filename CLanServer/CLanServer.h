@@ -11,6 +11,8 @@
 class CLanServer
 {
 	enum {
+		ID_MASK = 0xFFFFFFFF,	
+		INDEX_BIT_SHIFT = 32,
 		MAX_WSABUF = 100
 	};
 
@@ -30,23 +32,23 @@ public:
 	bool Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client);
 	void Stop();
 
-	void DisconnectSession(unsigned int session_id);
+	void DisconnectSession(unsigned long long session_id);
 	int GetSessionCount();
 
 
 #ifdef AUTO_PACKET
-	bool SendPacket(unsigned int session_id, PacketPtr packet);
-	virtual void OnRecv(unsigned int session_id, PacketPtr packet) = 0;
+	bool SendPacket(unsigned long long session_id, PacketPtr packet);
+	virtual void OnRecv(unsigned long long session_id, PacketPtr packet) = 0;
 #else
-	bool SendPacket(unsigned int session_id, CPacket* packet);
-	virtual void OnRecv(unsigned int session_id, CPacket* packet) = 0;
+	bool SendPacket(unsigned long long session_id, CPacket* packet);
+	virtual void OnRecv(unsigned long long session_id, CPacket* packet) = 0;
 #endif
 
 	virtual bool OnConnectionRequest(wchar_t* ip, unsigned short port) = 0;
-	virtual void OnClientJoin(unsigned int session_id/**/) = 0;
-	virtual void OnClientLeave() = 0;
+	virtual void OnClientJoin(unsigned long long session_id/**/) = 0;
+	virtual void OnClientLeave(unsigned long long session_id) = 0;
 	
-	virtual void OnSend(unsigned int session_id, int send_size) = 0;
+	virtual void OnSend(unsigned long long session_id, int send_size) = 0;
 
 	virtual void OnWorkerThreadBegin() = 0;
 	virtual void OnWorkerThreadEnd() = 0;
@@ -74,18 +76,19 @@ private:
 	void RunAcceptThread();
 	void RunIoThread();
 
-
 	bool RecvPost(Session* session);
 	bool SendPost(Session* session);
 
 	int UpdateIOCount(Session* session);
-	void ReleaseSession(unsigned int session_id);
+	void ReleaseSession(Session* session);
 
 	bool exit_flag = false;
 	bool isRunning = false;
 
-	Session session_arr[500];
-	DWORD session_id = 1;
+	LockFreeStack<unsigned short> empty_session_stack;
+
+	Session* session_arr;
+	unsigned int m_sess_id = 1;
 	
 	Monitor monitor;
 	Tracer tracer;

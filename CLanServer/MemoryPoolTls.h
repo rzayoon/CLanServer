@@ -212,8 +212,7 @@ public:
 		DATA* ret;
 		if (td_pool->size == 0) // 풀 다 쓴 경우
 		{
-			chunk_pool.Pop(&chunk_top); // 가용 청크 가져옴
-			if (chunk_top)
+			if (chunk_pool.Pop(&chunk_top))
 			{
 				td_pool->top = chunk_top;
 				td_pool->size = default_size;
@@ -237,12 +236,15 @@ public:
 	{
 		if (data == nullptr) return false;
 
+		if ((long long)data < 0xFFFF) 
+			int a = 0;
+
 		THREAD_DATA* td = (THREAD_DATA*)TlsGetValue(tls_index);
 		if (td == nullptr)
 		{
 			td = new THREAD_DATA;
-			td->pool = new POOL(default_size, default_size);
-			td->chunk = new POOL(0, default_size);
+			td->pool = new POOL(default_size, default_size, placement_new);
+			td->chunk = new POOL(0, default_size, placement_new);
 			TlsSetValue(tls_index, (LPVOID)td);
 		}
 		int size = default_size;

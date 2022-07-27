@@ -5,7 +5,6 @@
 
 Session::Session()
 {
-	used = false;
 
 	sock = 0;
 	port = 0;

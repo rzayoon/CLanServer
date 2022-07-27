@@ -5,7 +5,7 @@
 #include "LockFreePool.h"
 #include "MemoryPoolTls.h"
 
-#define AUTO_PACKET
+//#define AUTO_PACKET
 
 
 
@@ -131,7 +131,17 @@ public:
 		return packet;
 	}
 
-	inline void AddRef()
+	inline static void Free(CPacket* packet)
+	{
+		packet->SubRef();
+		return;
+	}
+
+
+
+protected:
+
+	void AddRef()
 	{
 		InterlockedIncrement((LONG*)&ref_cnt);
 		return;
@@ -141,7 +151,7 @@ public:
 	/// subref 이후에는 바로 다른 스레드에서 사용할 여지가 있으므로 
 	/// 건드리지 않는다.
 	/// </summary>
-	inline void SubRef()
+	void SubRef()
 	{
 		int temp_cnt = InterlockedDecrement((LONG*)&ref_cnt);
 		if (temp_cnt == 0)
@@ -149,10 +159,9 @@ public:
 		return;
 	}
 
-protected:
-
 	char* GetBufferPtrWithHeader(void);
 	int GetDataSizeWithHeader(void);
+	alignas(64) int ref_cnt;
 
 	inline static MemoryPoolTls<CPacket> packet_pool = MemoryPoolTls<CPacket>(1000);
 
@@ -163,7 +172,6 @@ protected:
 
 	int buffer_size;
 	int data_size;
-	alignas(64) int ref_cnt;
 
 };
 
@@ -180,7 +188,6 @@ public:
 	PacketPtr(CPacket* new_packet)
 	{
 		packet = new_packet;
-		packet->AddRef();
 	}
 
 	PacketPtr(PacketPtr& src)

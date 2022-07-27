@@ -14,10 +14,9 @@ public:
 	void Lock();
 	void Unlock();
 
-	bool used;
 	bool disconnect;
-	unsigned int session_id;
-	
+	alignas(8) unsigned int session_id;
+	unsigned short session_index;
 
 	OVERLAPPED recv_overlapped;
 	SOCKET recv_sock;

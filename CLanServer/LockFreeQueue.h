@@ -120,7 +120,6 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 	Node* head;
 	Node* next;
 	unsigned long long next_cnt;
-	T empty_data;
 
 	while (true)
 	{
@@ -149,7 +148,6 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 			//    하지만 다른 스레드 때문에 해야할 일을 못하는 것은 락프리의 목적에 위배된다.
 			//    next가 null로 읽히면 1, 2의 상황 구분하지 않고 그냥 없는 것으로 본다..
 			InterlockedIncrement64(&_size);
-			*data = empty_data;
 			return false;
 		}
 		else

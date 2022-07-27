@@ -40,7 +40,7 @@ void CPacket::Clear(void)
 	data_size = 0;
 	write_pos = 0;
 	read_pos = 0;
-	ref_cnt = 0;
+	ref_cnt = 1;
 
 	PacketHeader* header = (PacketHeader*)hidden_buf;
 	header->len = 0;
