@@ -5,7 +5,7 @@
 #include "LockFreePool.h"
 #include "MemoryPoolTls.h"
 
-//#define AUTO_PACKET
+#define AUTO_PACKET
 
 
 

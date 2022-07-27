@@ -369,7 +369,14 @@ inline void CLanServer::RunIoThread()
 				{
 					log_arr[0]++;
 				}                      
-#ifndef AUTO_PACKET				
+#ifdef AUTO_PACKET				
+				while (packet_cnt > 0)
+				{
+					session->temp_packet[--packet_cnt].~PacketPtr();
+				}
+
+
+#else
 				while (packet_cnt > 0)
 				{
 					session->temp_packet[--packet_cnt]->SubRef();
@@ -682,6 +689,12 @@ inline void CLanServer::ReleaseSession(Session* session)
 			while (session->send_q.Dequeue(&packet))
 			{
 			}
+			int remain = session->send_packet_cnt;
+			while (remain > 0)
+			{
+				session->temp_packet[--remain].~PacketPtr();
+			}
+
 #else
 			CPacket* packet;
 			while (session->send_q.Dequeue(&packet))
