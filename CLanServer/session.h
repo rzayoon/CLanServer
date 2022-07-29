@@ -18,7 +18,8 @@ public:
 	bool used;
 #endif
 
-	bool disconnect;
+	bool disconnect;  
+	// 64바이트를 띄울까..? disconnect 바뀌어도 id, index는 그대로 읽어야함..
 	alignas(8) unsigned int session_id;
 	unsigned short session_index;
 

@@ -93,13 +93,15 @@ public:
 
 private:
 
+	// 읽기 전용
 	char* buf;
 	unsigned int bufSize;
-	unsigned int front;
-	unsigned int rear;
+	
+	// 각각 다른 스레드에서 읽을 수 있음. 무효화 방지
+	alignas(64) unsigned int front;
+	alignas(64) unsigned int rear;
 
-	SRWLOCK srw;
 	alignas(64) int fillSize;
-	alignas(64) int b;
+	alignas(64)	SRWLOCK srw;
 };
 

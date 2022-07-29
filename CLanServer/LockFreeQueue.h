@@ -38,11 +38,16 @@ public:
 
 
 private:
-
+	// 읽는 순간
+	// pool -> Enqueue 들어오자마자 Dequeue 성공 시 각각 1회
+	// tail -> Dequeue 루프마다, enqueue 중 tail* 밀렸는지 확인 
+	// head -> Dequeue 루프마다
+	// size -> 인큐, 디큐마다. 1~2회 씩
 	alignas(64) Node* _tail;
 	alignas(64) Node* _head;
 	alignas(64) LONG64 _size;
-	LockFreePool<Node>* _pool;
+	// 고정값, 위의 멤버 변경 시 무효화 방지
+	alignas(64) LockFreePool<Node>* _pool;
 	bool _placement_new;
 };
 

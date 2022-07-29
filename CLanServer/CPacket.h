@@ -156,7 +156,6 @@ private:
 	char* GetBufferPtrNet(void);
 	int GetDataSizeNet(void);
 
-public:
 	void Encode();
 	bool Decode();
 
@@ -166,14 +165,14 @@ protected:
 
 
 	inline static MemoryPoolTls<CPacket> packet_pool = MemoryPoolTls<CPacket>(1000);
-
+	// 고정 
 	char* buffer;
 	char* hidden_buf;
+	int buffer_size;
+	// 변경 데이터 .. 다른 스레드에서 변하나..? 그렇지 않다.
+	int data_size;
 	int write_pos;
 	int read_pos;
-
-	int buffer_size;
-	int data_size;
 	alignas(64) int ref_cnt;
 
 };

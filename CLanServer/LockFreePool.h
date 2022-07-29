@@ -82,12 +82,12 @@ protected:
 
 	}
 
-	BLOCK_NODE* top;
-
-	int padding_size;
+	// 아토믹
+	alignas(64) BLOCK_NODE* top;
 	alignas(64) unsigned int use_count;
 	alignas(64) unsigned int capacity;
-	alignas(64) char b;
+	// 고정값
+	alignas(64) int padding_size;
 
 };
 
