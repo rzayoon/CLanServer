@@ -14,6 +14,10 @@ public:
 	void Lock();
 	void Unlock();
 
+#ifndef STACK_INDEX
+	bool used;
+#endif
+
 	bool disconnect;
 	alignas(8) unsigned int session_id;
 	unsigned short session_index;

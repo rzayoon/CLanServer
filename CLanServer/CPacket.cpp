@@ -8,8 +8,8 @@ CPacket::CPacket(int size)
 	buffer_size = size;
 	
 
-	hidden_buf = new char[size + sizeof(PacketHeader)];
-	buffer = hidden_buf + sizeof(PacketHeader);
+	hidden_buf = new char[size + sizeof(NetPacketHeader)];
+	buffer = hidden_buf + sizeof(NetPacketHeader);
 	Clear();
 
 }
@@ -40,10 +40,8 @@ void CPacket::Clear(void)
 	data_size = 0;
 	write_pos = 0;
 	read_pos = 0;
-	ref_cnt = 1;
+	ref_cnt = 0;
 
-	PacketHeader* header = (PacketHeader*)hidden_buf;
-	header->len = 0;
 }
 
 int CPacket::MoveWritePos(int size)
@@ -262,15 +260,96 @@ int CPacket::PutData(char* src, int size)
 	return size;
 }
 
-char* CPacket::GetBufferPtrWithHeader(void)
+char* CPacket::GetBufferPtrLan(void)
 {
-	PacketHeader* header = (PacketHeader*)hidden_buf;
+	LanPacketHeader* header = (LanPacketHeader*)((char*)buffer - sizeof(LanPacketHeader));
 	header->len = data_size;
-	return hidden_buf;
+	return (char*)header;
 
 }
 
-int CPacket::GetDataSizeWithHeader(void)
+int CPacket::GetDataSizeLan(void)
 {
-	return data_size + sizeof(PacketHeader);
+	return data_size + sizeof(LanPacketHeader);
+}
+
+char* CPacket::GetBufferPtrNet(void)
+{
+	NetPacketHeader* header = (NetPacketHeader*)((char*)buffer - sizeof(NetPacketHeader));
+	header->len = data_size;
+}
+
+int CPacket::GetDataSizeNet(void)
+{
+	return data_size + sizeof(NetPacketHeader);
+}
+
+
+void CPacket::Encode()
+{
+	NetPacketHeader* header = (NetPacketHeader*)((char*)buffer - sizeof(NetPacketHeader));
+	
+
+	
+	unsigned char* buf = (unsigned char*)buffer;
+
+	unsigned char r_key = 0x31;
+
+	unsigned char p = 0;
+	unsigned char e = 0;
+
+	unsigned char sum = 0;
+
+	for (int i = 0; i < data_size; i++)
+	{
+		sum += buf[i];
+	}
+
+	header->check_sum = sum;
+	buf = (unsigned char*)&header->check_sum; // 여기부터 해야함
+	for (int i = 0; i <= data_size; i++)
+	{
+		p = buf[i] ^ (p + r_key + i + 1);
+		e = p ^ (e + FIX_KEY + i + 1);
+		buf[i] = e;
+	}
+
+	header->code = PACKET_CODE;
+	header->len = data_size;
+	header->rand_key = r_key;
+
+}
+
+
+bool CPacket::Decode()
+{
+	NetPacketHeader* header = (NetPacketHeader*)((char*)buffer - sizeof(NetPacketHeader));
+
+	unsigned char* buf = (unsigned char*)&header->check_sum;
+
+	unsigned char r_key = header->rand_key;
+	unsigned char old_p = 0;
+	unsigned char p = 0;
+	unsigned char d = 0;
+	unsigned char e = 0;
+
+	for (int i = 0; i <= data_size; i++)
+	{
+		p = buf[i] ^ (e + FIX_KEY + i + 1);
+		e = buf[i];
+		d = p ^ (old_p + r_key + i + 1);
+		old_p = p;
+		buf[i] = d;
+	}
+
+	unsigned char sum = 0;
+
+	buf = (unsigned char*)buffer;
+	for (int i = 0; i < data_size; i++)
+		sum += buf[i];
+
+	if (sum != header->check_sum)
+		return false;
+
+	return true;
 }

@@ -14,15 +14,16 @@
 
 class CPacket
 {
+	friend class CLanServer;
+	friend class PacketPtr;
+	friend class MemoryPoolTls<CPacket>;
+
 public:
 	enum
 	{
 		eBUFFER_DEFAULT = 2000
 	};
 
-	friend class CLanServer;
-	friend class PacketPtr;
-	friend class MemoryPoolTls<CPacket>;
 private:	
 
 
@@ -131,17 +132,7 @@ public:
 		return packet;
 	}
 
-	inline static void Free(CPacket* packet)
-	{
-		packet->SubRef();
-		return;
-	}
-
-
-
-protected:
-
-	void AddRef()
+	inline void AddRef()
 	{
 		InterlockedIncrement((LONG*)&ref_cnt);
 		return;
@@ -151,7 +142,7 @@ protected:
 	/// subref 이후에는 바로 다른 스레드에서 사용할 여지가 있으므로 
 	/// 건드리지 않는다.
 	/// </summary>
-	void SubRef()
+	inline void SubRef()
 	{
 		int temp_cnt = InterlockedDecrement((LONG*)&ref_cnt);
 		if (temp_cnt == 0)
@@ -159,9 +150,20 @@ protected:
 		return;
 	}
 
-	char* GetBufferPtrWithHeader(void);
-	int GetDataSizeWithHeader(void);
-	alignas(64) int ref_cnt;
+private:
+	char* GetBufferPtrLan(void);
+	int GetDataSizeLan(void);
+	char* GetBufferPtrNet(void);
+	int GetDataSizeNet(void);
+
+public:
+	void Encode();
+	bool Decode();
+
+protected:
+
+	
+
 
 	inline static MemoryPoolTls<CPacket> packet_pool = MemoryPoolTls<CPacket>(1000);
 
@@ -172,6 +174,7 @@ protected:
 
 	int buffer_size;
 	int data_size;
+	alignas(64) int ref_cnt;
 
 };
 
@@ -188,6 +191,7 @@ public:
 	PacketPtr(CPacket* new_packet)
 	{
 		packet = new_packet;
+		packet->AddRef();
 	}
 
 	PacketPtr(PacketPtr& src)

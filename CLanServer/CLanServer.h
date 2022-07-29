@@ -6,6 +6,7 @@
 #include "Tracer.h"
 #include "monitor.h"
 
+#define STACK_INDEX
 
 
 class CLanServer
@@ -85,7 +86,9 @@ private:
 	bool exit_flag = false;
 	bool isRunning = false;
 
+#ifdef STACK_INDEX
 	LockFreeStack<unsigned short> empty_session_stack;
+#endif
 
 	Session* session_arr;
 	unsigned int m_sess_id = 1;

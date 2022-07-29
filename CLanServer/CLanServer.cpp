@@ -26,9 +26,11 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 	exit_flag = false;
 
 	session_arr = new Session[_max_client];
+
+#ifdef STACK_INDEX
 	for (int i = 0; i < _max_client; i++)
 		empty_session_stack.Push(i);
-
+#endif
 	
 	
 	WSADATA wsa;
@@ -218,9 +220,26 @@ inline void CLanServer::RunAcceptThread()
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
 			unsigned short index;
+#ifdef STACK_INDEX
 			while (!empty_session_stack.Pop(&index))
 			{
 			}
+#else
+			bool find = false;
+			while (!find)
+			{
+				for (index = 0; index < _max_client; index++)
+				{
+					if (seesion_arr[index].used == false)
+					{
+						find = true;
+						break;
+					}
+				}
+			}
+			session_arr[index].used = true;
+#endif
+
 			Session* session = &session_arr[index];
 
 			session->session_id = m_sess_id++;
@@ -315,14 +334,14 @@ inline void CLanServer::RunIoThread()
 
 				while (true)
 				{
-					PacketHeader header;
-					int q_size = session->recv_q.GetFillSize();
+					LanPacketHeader header;
 
-					session->recv_q.Peek((char*)&header, sizeof(header));
-
-					if (header.len + sizeof(header) > q_size)
+					if (session->recv_q.Peek((char*)&header, sizeof(header)) != sizeof(header))
 						break;
 
+					int q_size = session->recv_q.GetFillSize();
+					if (header.len + sizeof(header) > q_size)
+						break;
 					session->recv_q.MoveFront(sizeof(header));
 
 #ifdef AUTO_PACKET
@@ -414,8 +433,15 @@ bool CLanServer::SendPacket(unsigned long long session_id, PacketPtr packet)
 
 	unsigned short idx = session_id >> INDEX_BIT_SHIFT;
 	unsigned int id = session_id & ID_MASK;
+#ifndef STACK_INDEX
 
+	for (idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].session_id == id)
+			break;
+	}
 
+#endif
 
 	Session* session = &session_arr[idx];
 
@@ -456,7 +482,15 @@ bool CLanServer::SendPacket(unsigned long long session_id, CPacket* packet)
 	unsigned short idx = session_id >> INDEX_BIT_SHIFT;
 	unsigned int id = session_id & ID_MASK;
 
+#ifndef STACK_INDEX
 
+	for (idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].session_id == id)
+			break;
+	}
+
+#endif
 
 	Session* session = &session_arr[idx];
 
@@ -497,6 +531,16 @@ inline void CLanServer::DisconnectSession(unsigned long long session_id)
 {
 	unsigned short idx = session_id >> INDEX_BIT_SHIFT;
 	unsigned int id = session_id & ID_MASK;
+
+#ifndef STACK_INDEX
+
+	for (idx = 0; idx < _max_client; idx++)
+	{
+		if (session_arr[idx].session_id == id)
+			break;
+	}
+
+#endif
 
 	Session* session = &session_arr[idx];
 
@@ -597,8 +641,8 @@ inline bool CLanServer::SendPost(Session* session)
 			if (session->send_q.Dequeue(&packet) == false) continue;
 			
 
-			wsabuf[cnt].buf = (*packet)->GetBufferPtrWithHeader();
-			wsabuf[cnt].len = (*packet)->GetDataSizeWithHeader();
+			wsabuf[cnt].buf = (*packet)->GetBufferPtrLan();
+			wsabuf[cnt].len = (*packet)->GetDataSizeLan();
 			session->temp_packet[cnt] = packet;
 
 			++cnt;
@@ -715,7 +759,11 @@ inline void CLanServer::ReleaseSession(Session* session)
 
 			OnClientLeave(*(unsigned long long*)&session->session_id);
 
+#ifdef STACK_INDEX
 			empty_session_stack.Push(session->session_index);
+#else
+			session->used = false;
+#endif
 
 			InterlockedDecrement((LONG*)&session_cnt);
 		}

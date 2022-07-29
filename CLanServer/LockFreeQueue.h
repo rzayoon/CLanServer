@@ -165,8 +165,8 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 
 			Node* new_head = (Node*)((unsigned long long)next | (next_cnt << dfADDRESS_BIT));
 
-			*data = next->data;
-			// data가 객체인 경우.. 느려질 것 사용자의 문제. template type이 복사 비용이 적은 포인터나 일반 타입이었어야 한다.
+			*data = next->data; // data가 객체인 경우.. 느려질 것 사용자의 문제. template type이 복사 비용이 적은 포인터나 일반 타입이었어야 한다.
+			
 			if (InterlockedCompareExchangePointer((PVOID*)&_head, new_head, (PVOID)old_head) == (PVOID)old_head)
 			{
 				head->data.~T();
