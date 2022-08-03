@@ -38,7 +38,6 @@ private:
 
 	alignas(64) Node* _top;
 	alignas(64) ULONG64 _size;
-	// °íÁ¤°ª
 	alignas(64) bool _placement_new;
 	LockFreePool<Node> *_pool;
 
@@ -69,10 +68,7 @@ inline bool LockFreeStack<T>::Push(T data)
 
 	node->data = data;
 
-	if (_placement_new)
-		data.~T();
-
-
+	
 	unsigned long long old_top;
 	Node* old_top_addr;
 	Node* new_top;
@@ -124,8 +120,8 @@ inline bool LockFreeStack<T>::Pop(T* data)
 		{
 			InterlockedDecrement(&_size);
 			*data = old_top_addr->data;
-			if(_placement_new)
-				new(data) T;
+			
+			old_top_addr->data.~T();
 			_pool->Free(old_top_addr);
 
 			break;

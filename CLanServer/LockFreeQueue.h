@@ -38,16 +38,11 @@ public:
 
 
 private:
-	// 읽는 순간
-	// pool -> Enqueue 들어오자마자 Dequeue 성공 시 각각 1회
-	// tail -> Dequeue 루프마다, enqueue 중 tail* 밀렸는지 확인 
-	// head -> Dequeue 루프마다
-	// size -> 인큐, 디큐마다. 1~2회 씩
+
 	alignas(64) Node* _tail;
 	alignas(64) Node* _head;
 	alignas(64) LONG64 _size;
-	// 고정값, 위의 멤버 변경 시 무효화 방지
-	alignas(64) LockFreePool<Node>* _pool;
+	LockFreePool<Node>* _pool;
 	bool _placement_new;
 };
 
@@ -77,8 +72,6 @@ inline bool LockFreeQueue<T>::Enqueue(T data)
 	Node* new_tail;
 	Node* next = nullptr;
 	unsigned long long next_cnt;
-
-	new(&node->data) T;
 
 	node->data = data;
 	node->next = nullptr;
@@ -170,11 +163,11 @@ inline bool LockFreeQueue<T>::Dequeue(T* data)
 
 			Node* new_head = (Node*)((unsigned long long)next | (next_cnt << dfADDRESS_BIT));
 
-			*data = next->data; // data가 객체인 경우.. 느려질 것 사용자의 문제. template type이 복사 비용이 적은 포인터나 일반 타입이었어야 한다.
-			
+			*data = next->data;
+			// data가 객체인 경우.. 느려질 것 사용자의 문제. template type이 복사 비용이 적은 포인터나 일반 타입이었어야 한다.
 			if (InterlockedCompareExchangePointer((PVOID*)&_head, new_head, (PVOID)old_head) == (PVOID)old_head)
 			{
-				head->data.~T();
+				head->data.~T(); // 문제!! 더미 노드 하나가 삭제되지 않고 물려버림
 				_pool->Free(head);
 				break;
 			}

@@ -8,7 +8,7 @@
 
 #include <conio.h>
 #include "EchoServer.h"
-
+#include "TextParser.h"
 
 
 
@@ -18,13 +18,33 @@ EchoServer server;
 
 int main()
 {
-	int a = 0;
-
 	
+	timeBeginPeriod(1);
 
-	server.Start(L"0.0.0.0", SERVERPORT, 4, 4, 0, 200);
+	char ip[16];
+	short port;
+	int worker;
+	int max_worker;
+	int max_user;
+	int nagle;
 
-	ULONGLONG oldTick = GetTickCount64();
+	TextParser parser;
+	if (!parser.LoadFile("Config.ini")) return 1;
+
+	parser.GetStringValue("ServerBindIP", ip, 16);
+	parser.GetValue("ServerBindPort", (int*)&port);
+	parser.GetValue("WorkerThread", &worker);
+	parser.GetValue("MaxWorkerThread", &max_worker);
+	parser.GetValue("MaxUser", &max_user);
+	parser.GetValue("Nagle", &nagle);
+
+	wchar_t wip[16];
+
+	MultiByteToWideChar(CP_ACP, 0, ip, 16, wip, 16);
+
+	server.Start(wip, port, worker, max_worker, nagle, max_user);
+
+	DWORD oldTick = timeGetTime();
 	while (1)
 	{
 		if (_kbhit())
@@ -41,16 +61,19 @@ int main()
 			}
 		}
 
-		ULONGLONG term = GetTickCount64() - oldTick;
+		DWORD term = timeGetTime() - oldTick;
 		Sleep(1000 - term);
-		oldTick = GetTickCount64();
+		oldTick = timeGetTime();
 
 		server.Show();
 
 	}
 
+	timeEndPeriod(1);
+
 	wprintf(L"Fine Closing\n");
 	Sleep(5000);
+
 
 	return 0;
 }

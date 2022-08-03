@@ -14,18 +14,21 @@
 long long packet_counter[101];
 int log_arr[100];
 
-bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client)
+bool CLanServer::Start(const wchar_t* _ip, unsigned short _port, int _num_create_worker, int _num_run_worker, bool _nagle, int _max_client)
 {
 	if (isRunning)
 	{
 		OnError(90, L"Duplicate Start Request\n");
 	}
-	_max_client = max_client;
-	wcscpy_s(_ip, ip);
-	_port = port;
+	max_client = _max_client;
+	wcscpy_s(ip, _ip);
+	port = _port;
+	nagle = _nagle;
+	max_worker = _num_run_worker;
+	num_of_worker = _num_create_worker;
 	exit_flag = false;
 
-	session_arr = new Session[_max_client];
+	session_arr = new Session[max_client];
 
 #ifdef STACK_INDEX
 	for (int i = 0; i < _max_client; i++)
@@ -41,7 +44,7 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 		return false;
 	}
 
-	hcp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, num_run_worker);
+	hcp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, max_worker);
 	if (hcp == NULL)
 	{
 		OnError(2, L"Create IOCP()\n");
@@ -54,7 +57,6 @@ bool CLanServer::Start(const wchar_t* ip, unsigned short port, int num_create_wo
 		OnError(3, L"Create Thread Failed\n");
 		return false;
 	}
-	num_of_worker = num_create_worker;
 	hWorkerThread = new HANDLE[num_of_worker];
 	for (int i = 0; i < num_of_worker; i++)
 	{
@@ -96,7 +98,7 @@ void CLanServer::Stop()
 
 	InetPtonW(AF_INET, ip, &serveraddr.sin_addr.s_addr);
 
-	serveraddr.sin_port = htons(_port);
+	serveraddr.sin_port = htons(port);
 
 	exit_flag = true;
 	int ret_con = connect(sock, (sockaddr*)&serveraddr, sizeof(serveraddr));
@@ -108,7 +110,7 @@ void CLanServer::Stop()
 
 	closesocket(sock);
 
-	for (int i = 0; i < _max_client; i++)
+	for (int i = 0; i < max_client; i++)
 	{
 		if (!session_arr[i].release_flag)
 		{
@@ -183,19 +185,22 @@ inline void CLanServer::RunAcceptThread()
 	SOCKADDR_IN serveraddr;
 	ZeroMemory(&serveraddr, sizeof(serveraddr));
 	serveraddr.sin_family = AF_INET;
-	InetPtonW(AF_INET, _ip, &serveraddr.sin_addr.s_addr);
-	serveraddr.sin_port = htons(_port);
+	InetPtonW(AF_INET, ip, &serveraddr.sin_addr.s_addr);
+	serveraddr.sin_port = htons(port);
 	retval = bind(listen_sock, (SOCKADDR*)&serveraddr, sizeof(serveraddr));
 	if (retval == SOCKET_ERROR) return;
 
 	int size = 0;
 	setsockopt(listen_sock, SOL_SOCKET, SO_SNDBUF, (char*)&size, sizeof(size));
 
+	if (nagle)
+		setsockopt(listen_sock, IPPROTO_TCP, TCP_NODELAY, (char*)&nagle, sizeof(nagle));
+	
 
 	retval = listen(listen_sock, SOMAXCONN);
 	if (retval == SOCKET_ERROR) return;
 
-	wprintf_s(L"Listen Port: %d\n", _port);
+	wprintf_s(L"Listen Port: %d\n", port);
 
 	SOCKET client_sock;
 	SOCKADDR_IN clientaddr;
@@ -317,6 +322,7 @@ inline void CLanServer::RunIoThread()
 		{
 			tracer.trace(78, session, session->session_id);
 			session->disconnect = true;
+			shutdown(session->sock, SD_BOTH);
 		
 		}
 		else {
@@ -548,8 +554,10 @@ inline void CLanServer::DisconnectSession(unsigned long long session_id)
 	if (session->release_flag == 0)
 	{
 		if (session->session_id == id)
+		{
 			session->disconnect = true;
-
+			shutdown(session->sock, SD_BOTH);
+		}
 	}
 	UpdateIOCount(session);
 

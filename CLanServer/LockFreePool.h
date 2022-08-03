@@ -4,6 +4,9 @@
 #include <new>
 #include <stdio.h>
 
+//#define LOCKFREE_DEBUG
+
+
 #define dfPAD -1
 #define dfADDRESS_MASK 0x00007fffffffffff
 #define dfADDRESS_BIT 47
@@ -11,16 +14,22 @@
 template <class DATA>
 class LockFreePool
 {
+#ifdef LOCKFREE_DEBUG
 	enum
 	{
 		PAD = 0xABCDABCDABCDABCD
 	};
+#endif
 
 	struct BLOCK_NODE
 	{
+#ifdef LOCKFREE_DEBUG
 		unsigned long long front_pad;
+#endif
 		DATA data;
+#ifdef LOCKFREE_DEBUG
 		unsigned long long back_pad;
+#endif
 		BLOCK_NODE* next;
 	
 
@@ -82,12 +91,13 @@ protected:
 
 	}
 
-	// 아토믹
-	alignas(64) BLOCK_NODE* top;
+	BLOCK_NODE* top;
+#ifdef LOCKFREE_DEBUG
+	int padding_size;
+#endif
 	alignas(64) unsigned int use_count;
 	alignas(64) unsigned int capacity;
-	// 고정값
-	alignas(64) int padding_size;
+	alignas(64) char b;
 
 };
 
@@ -105,14 +115,18 @@ LockFreePool<DATA>::LockFreePool(int _capacity)
 	capacity = _capacity;
 	use_count = 0;
 
+#ifdef LOCKFREE_DEBUG
 	padding_size = max(sizeof(BLOCK_NODE::front_pad), alignof(DATA));
+#endif
 
 	for (unsigned int i = 0; i < capacity; i++)
 	{
 		BLOCK_NODE* temp = (BLOCK_NODE*)_aligned_malloc(sizeof(BLOCK_NODE), alignof(BLOCK_NODE));
 		ZeroMemory(&temp->data, sizeof(DATA));
+#ifdef LOCKFREE_DEBUG
 		temp->front_pad = PAD;
 		temp->back_pad = PAD;
+#endif
 
 		temp->next = top;
 		top = temp;
@@ -159,8 +173,10 @@ DATA* LockFreePool<DATA>::Alloc()
 			
 			old_top_addr = (BLOCK_NODE*)_aligned_malloc(sizeof(BLOCK_NODE), alignof(BLOCK_NODE));
 			ZeroMemory(&old_top_addr->data, sizeof(DATA));
+#ifdef LOCKFREE_DEBUG
 			old_top_addr->front_pad = PAD;
 			old_top_addr->back_pad = PAD;
+#endif LOCKFREE_DEBUG
 			old_top_addr->next = nullptr;
 
 			break;
@@ -189,16 +205,19 @@ template<class DATA>
 bool LockFreePool<DATA>::Free(DATA* data)
 {
 	unsigned long long old_top;
+
+#ifdef LOCKFREE_DEBUG
 	// data가 8바이트 초과하면 문제될 수 있음 구조체 패딩 관련
 	BLOCK_NODE* node = (BLOCK_NODE*)((char*)data - padding_size); 
-	BLOCK_NODE* old_top_addr;
-	PVOID new_top;
-
 	if (node->front_pad != PAD || node->back_pad != PAD) // 사용 중에 버퍼 오버런 있었는지 체크용
 	{
 		Crash();
 	}
-	
+#else
+	BLOCK_NODE* node = (BLOCK_NODE*)data;
+#endif
+	BLOCK_NODE* old_top_addr;
+	PVOID new_top;
 
 
 	while (1)

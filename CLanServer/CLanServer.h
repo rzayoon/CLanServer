@@ -21,7 +21,7 @@ public:
 
 	CLanServer()
 	{
-		ZeroMemory(_ip, sizeof(_ip));
+		ZeroMemory(ip, sizeof(ip));
 	}
 
 	~CLanServer()
@@ -66,10 +66,12 @@ private:
 	HANDLE hAcceptThread;
 	HANDLE* hWorkerThread;
 	int num_of_worker;
-	int _max_client;
+	int max_worker;
+	int max_client;
+	bool nagle;
 	// IP Port
-	unsigned short _port;
-	wchar_t _ip[16];
+	unsigned short port;
+	wchar_t ip[16];
 
 	static unsigned long _stdcall AcceptThread(void* param);
 	static unsigned long _stdcall IoThread(void* param);
