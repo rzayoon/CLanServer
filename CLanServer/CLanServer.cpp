@@ -14,24 +14,29 @@
 long long packet_counter[101];
 int log_arr[100];
 
-bool CLanServer::Start(const wchar_t* _ip, unsigned short _port, int _num_create_worker, int _num_run_worker, bool _nagle, int _max_client)
+bool CLanServer::Start(const wchar_t* _ip, unsigned short _port,
+	int _iocp_worker, int _iocp_active, int _max_session, int _max_user)
 {
 	if (isRunning)
 	{
 		OnError(90, L"Duplicate Start Request\n");
 	}
-	max_client = _max_client;
+	nagle = true;
+
+	max_session = _max_session;
+	max_user = _max_user;
 	wcscpy_s(ip, _ip);
 	port = _port;
-	nagle = _nagle;
-	max_worker = _num_run_worker;
-	num_of_worker = _num_create_worker;
+
+	iocp_active = _iocp_active;
+	iocp_worker = _iocp_worker;
+
 	exit_flag = false;
 
-	session_arr = new Session[max_client];
+	session_arr = new Session[max_session];
 
 #ifdef STACK_INDEX
-	for (int i = 0; i < _max_client; i++)
+	for (int i = 0; i < max_session; i++)
 		empty_session_stack.Push(i);
 #endif
 	
@@ -44,7 +49,7 @@ bool CLanServer::Start(const wchar_t* _ip, unsigned short _port, int _num_create
 		return false;
 	}
 
-	hcp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, max_worker);
+	hcp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, iocp_active);
 	if (hcp == NULL)
 	{
 		OnError(2, L"Create IOCP()\n");
@@ -57,8 +62,8 @@ bool CLanServer::Start(const wchar_t* _ip, unsigned short _port, int _num_create
 		OnError(3, L"Create Thread Failed\n");
 		return false;
 	}
-	hWorkerThread = new HANDLE[num_of_worker];
-	for (int i = 0; i < num_of_worker; i++)
+	hWorkerThread = new HANDLE[iocp_worker];
+	for (int i = 0; i < iocp_worker; i++)
 	{
 		hWorkerThread[i] = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)IoThread, this, 0, NULL);
 		if (hWorkerThread[i] == NULL)
@@ -110,7 +115,7 @@ void CLanServer::Stop()
 
 	closesocket(sock);
 
-	for (int i = 0; i < max_client; i++)
+	for (int i = 0; i < max_session; i++)
 	{
 		if (!session_arr[i].release_flag)
 		{
@@ -120,30 +125,30 @@ void CLanServer::Stop()
 
 	wprintf(L"Disconnected all session\n");
 
-	HANDLE* hExit = new HANDLE[num_of_worker + 1];
+	HANDLE* hExit = new HANDLE[iocp_worker + 1];
 
-	for (int i = 0; i < num_of_worker; i++)
+	for (int i = 0; i < iocp_worker; i++)
 	{
 		hExit[i] = hWorkerThread[i];
 	}
 	delete[] hWorkerThread;
-	hExit[num_of_worker] = hAcceptThread;
+hExit[iocp_worker] = hAcceptThread;
 
-	for (int i = 0; i < num_of_worker; i++)
-		PostQueuedCompletionStatus(hcp, 0, 0, 0);
+for (int i = 0; i < iocp_worker; i++)
+	PostQueuedCompletionStatus(hcp, 0, 0, 0);
 
 
-	WaitForMultipleObjects(num_of_worker + 1, hExit, TRUE, INFINITE);
-	
-	delete[] hExit;
-	delete[] session_arr;
+WaitForMultipleObjects(iocp_worker + 1, hExit, TRUE, INFINITE);
 
-	WSACleanup();
+delete[] hExit;
+delete[] session_arr;
 
-	isRunning = false;
-	
+WSACleanup();
 
-	return;
+isRunning = false;
+
+
+return;
 }
 
 inline int CLanServer::GetSessionCount()
@@ -195,7 +200,7 @@ inline void CLanServer::RunAcceptThread()
 
 	if (nagle)
 		setsockopt(listen_sock, IPPROTO_TCP, TCP_NODELAY, (char*)&nagle, sizeof(nagle));
-	
+
 
 	retval = listen(listen_sock, SOMAXCONN);
 	if (retval == SOCKET_ERROR) return;
@@ -221,31 +226,43 @@ inline void CLanServer::RunAcceptThread()
 		temp_port = ntohs(clientaddr.sin_port);
 
 		tracer.trace(70, 0, client_sock);
+		monitor.IncAccept();
 
 		if (OnConnectionRequest(temp_ip, temp_port))
 		{
 			unsigned short index;
 #ifdef STACK_INDEX
-			while (!empty_session_stack.Pop(&index))
+			if (!empty_session_stack.Pop(&index))
 			{
+				closesocket(client_sock);
+				continue;
 			}
+
+			
 #else
 			bool find = false;
-			while (!find)
+			
+			for (index = 0; index < _max_client; index++)
 			{
-				for (index = 0; index < _max_client; index++)
+				if (seesion_arr[index].used == false)
 				{
-					if (seesion_arr[index].used == false)
-					{
-						find = true;
-						break;
-					}
+					find = true;
+					break;
 				}
 			}
+
+			if (!find)
+			{
+				closesocket(client_sock);
+				continue;
+			}
+			
 			session_arr[index].used = true;
 #endif
 
 			Session* session = &session_arr[index];
+
+			InterlockedIncrement((LONG*)&session->io_count);
 
 			session->session_id = m_sess_id++;
 			if (m_sess_id == 0) m_sess_id++;
@@ -253,12 +270,11 @@ inline void CLanServer::RunAcceptThread()
 			session->sock = client_sock;
 			wcscpy_s(session->ip, _countof(session->ip), temp_ip);
 			session->port = ntohs(clientaddr.sin_port);
-			session->io_count = 0;
 			session->send_flag = false;
 			session->send_packet_cnt = 0;
 			session->disconnect = false;
 			//session->send_q.ClearBuffer(); 비어있어야 정상
-			session->recv_q.ClearBuffer();
+			session->recv_q.ClearBuffer(); // 얘는??
 
 			CreateIoCompletionPort((HANDLE)client_sock, hcp, (ULONG_PTR)session, 0);
 
@@ -267,16 +283,15 @@ inline void CLanServer::RunAcceptThread()
 			tracer.trace(10, session, session->session_id); // accept
 
 			//접속
-			monitor.IncAccept();
-
 			InterlockedIncrement((LONG*)&session_cnt);
-
 
 			// RecvPost()
 			if (RecvPost(session))
 			{
-				OnClientJoin(*((unsigned long long*)&session->session_id));
+				OnClientJoin(*((unsigned long long*) & session->session_id));
 			}
+
+			UpdateIOCount(session);
 		}
 		else // Connection Requeset 거부
 		{
@@ -321,9 +336,11 @@ inline void CLanServer::RunIoThread()
 		if (cbTransferred == 0 || session->disconnect) // Pending 후 I/O 처리 실패
 		{
 			tracer.trace(78, session, session->session_id);
-			session->disconnect = true;
-			shutdown(session->sock, SD_BOTH);
-		
+			if (!session->disconnect)
+			{
+				session->disconnect = true;
+				CancelIoEx((HANDLE)session->sock, NULL);
+			}
 		}
 		else {
 			OnWorkerThreadBegin();
@@ -454,7 +471,7 @@ bool CLanServer::SendPacket(unsigned long long session_id, PacketPtr packet)
 	InterlockedIncrement((LONG*)&session->io_count);
 	if (session->release_flag == 0)
 	{
-		if (session->session_id == id)
+		if (session->session_id == id && !session->disconnect)
 		{
 			session->send_q.Enqueue(packet);  // 64 bit 기준 8byte
 
@@ -556,7 +573,9 @@ inline void CLanServer::DisconnectSession(unsigned long long session_id)
 		if (session->session_id == id)
 		{
 			session->disconnect = true;
-			shutdown(session->sock, SD_BOTH);
+			// shutdown은 linger 작동 안함. rst 안쏜다
+			CancelIoEx((HANDLE)session->sock, NULL);
+
 		}
 	}
 	UpdateIOCount(session);

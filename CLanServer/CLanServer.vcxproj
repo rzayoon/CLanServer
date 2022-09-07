@@ -159,6 +159,7 @@
   <ItemGroup>
     <ClInclude Include="CLanServer.h" />
     <ClInclude Include="CPacket.h" />
+    <ClInclude Include="CrashDump.h" />
     <ClInclude Include="EchoServer.h" />
     <ClInclude Include="LockFreePool.h" />
     <ClInclude Include="LockFreeQueue.h" />
@@ -174,6 +175,7 @@
   <ItemGroup>
     <ClCompile Include="CLanServer.cpp" />
     <ClCompile Include="CPacket.cpp" />
+    <ClCompile Include="CrashDump.cpp" />
     <ClCompile Include="EchoServer.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="monitor.cpp" />

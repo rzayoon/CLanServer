@@ -54,6 +54,9 @@
     <ClInclude Include="TextParser.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
+    <ClInclude Include="CrashDump.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CLanServer.cpp">
@@ -81,6 +84,9 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="TextParser.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="CrashDump.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>

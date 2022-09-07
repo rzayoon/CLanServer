@@ -30,7 +30,8 @@ public:
 			Stop();
 	}
 
-	bool Start(const wchar_t* ip, unsigned short port, int num_create_worker, int num_run_worker, bool nagle, int max_client);
+	bool Start(const wchar_t* _ip, unsigned short _port,
+		int _iocp_worker, int _iocp_active, int _max_session, int _max_user);
 	void Stop();
 
 	void DisconnectSession(unsigned long long session_id);
@@ -65,9 +66,14 @@ private:
 
 	HANDLE hAcceptThread;
 	HANDLE* hWorkerThread;
-	int num_of_worker;
-	int max_worker;
-	int max_client;
+	int iocp_worker;
+	int iocp_active;
+	int max_session;
+
+protected:
+	unsigned int max_user;
+private:
+
 	bool nagle;
 	// IP Port
 	unsigned short port;

@@ -20,29 +20,28 @@ int main()
 {
 	
 	timeBeginPeriod(1);
-
 	char ip[16];
-	short port;
+	int port;
 	int worker;
 	int max_worker;
 	int max_user;
-	int nagle;
+	int max_session;
 
 	TextParser parser;
 	if (!parser.LoadFile("Config.ini")) return 1;
 
 	parser.GetStringValue("ServerBindIP", ip, 16);
-	parser.GetValue("ServerBindPort", (int*)&port);
-	parser.GetValue("WorkerThread", &worker);
-	parser.GetValue("MaxWorkerThread", &max_worker);
+	parser.GetValue("ServerBindPort", &port);
+	parser.GetValue("IOCPWorkerThread", &worker);
+	parser.GetValue("IOCPActiveThread", &max_worker);
 	parser.GetValue("MaxUser", &max_user);
-	parser.GetValue("Nagle", &nagle);
+	parser.GetValue("MaxSession", &max_session);
 
 	wchar_t wip[16];
 
 	MultiByteToWideChar(CP_ACP, 0, ip, 16, wip, 16);
 
-	server.Start(wip, port, worker, max_worker, nagle, max_user);
+	server.Start(wip, port, worker, max_worker, max_session, max_user);
 
 	DWORD oldTick = timeGetTime();
 	while (1)
@@ -61,10 +60,8 @@ int main()
 			}
 		}
 
-		DWORD term = timeGetTime() - oldTick;
-		Sleep(1000 - term);
-		oldTick = timeGetTime();
-
+		Sleep(1000);
+		
 		server.Show();
 
 	}
