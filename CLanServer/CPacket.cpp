@@ -1,6 +1,6 @@
 #include <string.h>
 #include "CPacket.h"
-#include "Protocol.h"
+#include "NetProtocol.h"
 
 
 CPacket::CPacket(int size)
@@ -40,7 +40,7 @@ void CPacket::Clear(void)
 	data_size = 0;
 	write_pos = 0;
 	read_pos = 0;
-	ref_cnt = 0;
+	ref_cnt = 1;
 
 }
 
@@ -277,6 +277,8 @@ char* CPacket::GetBufferPtrNet(void)
 {
 	NetPacketHeader* header = (NetPacketHeader*)((char*)buffer - sizeof(NetPacketHeader));
 	header->len = data_size;
+
+	return (char*)header;
 }
 
 int CPacket::GetDataSizeNet(void)
@@ -293,7 +295,7 @@ void CPacket::Encode()
 	
 	unsigned char* buf = (unsigned char*)buffer;
 
-	unsigned char r_key = 0x31;
+	unsigned char r_key = rand();
 
 	unsigned char p = 0;
 	unsigned char e = 0;
@@ -310,11 +312,11 @@ void CPacket::Encode()
 	for (int i = 0; i <= data_size; i++)
 	{
 		p = buf[i] ^ (p + r_key + i + 1);
-		e = p ^ (e + FIX_KEY + i + 1);
+		e = p ^ (e + packet_key + i + 1);
 		buf[i] = e;
 	}
 
-	header->code = PACKET_CODE;
+	header->code = packet_code;
 	header->len = data_size;
 	header->rand_key = r_key;
 
@@ -335,7 +337,7 @@ bool CPacket::Decode()
 
 	for (int i = 0; i <= data_size; i++)
 	{
-		p = buf[i] ^ (e + FIX_KEY + i + 1);
+		p = buf[i] ^ (e + packet_key + i + 1);
 		e = buf[i];
 		d = p ^ (old_p + r_key + i + 1);
 		old_p = p;

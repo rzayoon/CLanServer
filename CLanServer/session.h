@@ -18,7 +18,6 @@ public:
 	bool used;
 #endif
 
-	bool disconnect;  
 	// 64바이트를 띄울까..? disconnect 바뀌어도 id, index는 그대로 읽어야함..
 	alignas(8) unsigned int session_id;
 	unsigned short session_index;
@@ -38,6 +37,8 @@ public:
 	alignas(64) SOCKET sock;
 	alignas(64) int io_count; // 경계에만 세우고 뒤에 다른 변수 들어올 수 있음.
 	int release_flag;
+	alignas(64) int pend_count; // CancelIO 타이밍 잡기
+	int disconnect;
 	alignas(64) int send_flag;
 	alignas(64) int send_packet_cnt;  // Send에 넣은 Packet 객체 삭제에 필요
 	alignas(64) int b;

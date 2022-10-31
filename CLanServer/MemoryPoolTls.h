@@ -27,12 +27,11 @@ class MemoryPoolTls
 	{
 	public:
 
-		POOL(int _block_num, int _default_size = DEFAULT_SIZE, bool _placement_new = false)
+		POOL(int _init_size, int _default_size, bool _placement_new)
 		{
-			size = _block_num;
+			size = _init_size;
 			default_size = _default_size;
 			placement_new = _placement_new;
-
 
 
 			if (placement_new)
@@ -85,10 +84,10 @@ class MemoryPoolTls
 		BLOCK_NODE* Alloc()
 		{
 	
-			size--;
 			BLOCK_NODE* data = top;
 			top = top->next;
-		
+			size--;
+
 			return data;
 		}
 
@@ -143,7 +142,7 @@ class MemoryPoolTls
 		BLOCK_NODE* top;
 
 		int size;
-		int default_size;
+		alignas(64) int default_size;
 		bool placement_new;
 	};
 
@@ -164,6 +163,8 @@ public:
 			wprintf(L"%d tls error\n", GetLastError());
 		placement_new = _placement_new;
 
+		use_size = 0;
+		chunk_cnt = 0;
 		default_size = _default_size;
 	}
 
@@ -202,8 +203,8 @@ public:
 		if (td == nullptr)
 		{
 			td = new THREAD_DATA;
-			td->pool = new POOL(default_size, default_size);
-			td->chunk = new POOL(0, default_size);
+			td->pool = new POOL(default_size, default_size, placement_new);
+			td->chunk = new POOL(0, default_size, placement_new);
 			TlsSetValue(tls_index, (LPVOID)td);
 		}
 
@@ -217,6 +218,7 @@ public:
 		{
 			if (chunk_pool.Pop(&chunk_top))
 			{ // 가용 청크 가져옴
+				InterlockedIncrement((LONG*)&chunk_cnt);
 				td_pool->top = chunk_top;
 				td_pool->size = default_size;
 
@@ -229,7 +231,10 @@ public:
 		}
 		ret = (DATA*)td_pool->Alloc();
 		
-		
+		if (placement_new)
+			new(ret) DATA;
+
+		InterlockedIncrement((LONG*)&use_size);
 		
 
 		return ret;
@@ -251,6 +256,9 @@ public:
 		POOL* td_pool = td->pool;
 		POOL* td_chunk = td->chunk;
 
+		if (placement_new)
+			data->~DATA();
+
 		if (td_pool->size == size) //풀 초과분
 		{
 			td_chunk->Free((BLOCK_NODE*)data);
@@ -258,6 +266,7 @@ public:
 			if (td_chunk->size == size) //청크도 꽉참
 			{
 				chunk_pool.Push(td_chunk->top);
+				InterlockedIncrement((LONG*)&chunk_cnt);
 				td_chunk->Clear();
 			}
 		}
@@ -266,14 +275,24 @@ public:
 			td_pool->Free((BLOCK_NODE*)data);
 		}
 
+		InterlockedDecrement((LONG*)&use_size);
+
 		return true;
+	}
+
+	int GetUseSize()
+	{
+		return use_size;
 	}
 
 private:
 
 	LockFreeStack<BLOCK_NODE*> chunk_pool = LockFreeStack<BLOCK_NODE*>(0);
 
-	int tls_index;
+	alignas(64) int use_size;
+	alignas(64) int chunk_cnt;
+	alignas(64) int tls_index;
 	bool placement_new;
 	int default_size;
+	int a = 0;
 };

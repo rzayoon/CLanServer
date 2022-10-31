@@ -5,7 +5,7 @@
 #include "LockFreePool.h"
 #include "MemoryPoolTls.h"
 
-#define AUTO_PACKET
+
 
 
 
@@ -125,11 +125,20 @@ public:
 	int GetData(char* dest, int size);
 	int PutData(char* src, int size);
 
+
+
 	inline static CPacket* Alloc()
 	{
 		CPacket* packet = packet_pool.Alloc();
 		packet->Clear();
 		return packet;
+	}
+
+	inline static void Free(CPacket* packet)
+	{
+		packet->SubRef();
+
+		return;
 	}
 
 	inline void AddRef()
@@ -150,25 +159,42 @@ public:
 		return;
 	}
 
+	void Encode();
+	bool Decode();
+
 private:
 	char* GetBufferPtrLan(void);
 	int GetDataSizeLan(void);
 	char* GetBufferPtrNet(void);
 	int GetDataSizeNet(void);
 
-	void Encode();
-	bool Decode();
+
+	inline static int GetUsePool()
+	{
+		return packet_pool.GetUseSize();
+	}
+
+	inline static void SetPacketCode(unsigned char code)
+	{
+		packet_code = code;
+	}
+
+	inline static void SetPacketKey(unsigned char key)
+	{
+		packet_key = key;
+	}
 
 protected:
 
-	
-
-
+	// 정적 멤버
 	inline static MemoryPoolTls<CPacket> packet_pool = MemoryPoolTls<CPacket>(1000);
+	inline static unsigned char packet_code = 0;
+	inline static unsigned char packet_key = 0;
 	// 고정 
 	char* buffer;
 	char* hidden_buf;
 	int buffer_size;
+	
 	// 변경 데이터 .. 다른 스레드에서 변하나..? 그렇지 않다.
 	int data_size;
 	int write_pos;

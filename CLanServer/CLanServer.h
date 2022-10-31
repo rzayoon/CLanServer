@@ -85,10 +85,14 @@ private:
 	void RunAcceptThread();
 	void RunIoThread();
 
+	void Disconnect(Session* session);
+
 	bool RecvPost(Session* session);
-	bool SendPost(Session* session);
+	void SendPost(Session* session);
 
 	int UpdateIOCount(Session* session);
+	void UpdatePendCount(Session* session);
+	void CancelIOSession(Session* session);
 	void ReleaseSession(Session* session);
 
 	bool exit_flag = false;

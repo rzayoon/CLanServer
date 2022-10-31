@@ -166,6 +166,7 @@
     <ClInclude Include="LockFreeStack.h" />
     <ClInclude Include="MemoryPoolTls.h" />
     <ClInclude Include="monitor.h" />
+    <ClInclude Include="NetProtocol.h" />
     <ClInclude Include="Protocol.h" />
     <ClInclude Include="RingBuffer.h" />
     <ClInclude Include="session.h" />

@@ -286,10 +286,9 @@ inline void CLanServer::RunAcceptThread()
 			InterlockedIncrement((LONG*)&session_cnt);
 
 			// RecvPost()
-			if (RecvPost(session))
-			{
-				OnClientJoin(*((unsigned long long*) & session->session_id));
-			}
+			OnClientJoin(*((unsigned long long*) & session->session_id));
+
+			RecvPost(session);
 
 			UpdateIOCount(session);
 		}
@@ -325,6 +324,7 @@ inline void CLanServer::RunIoThread()
 			break;
 		}
 
+		OnWorkerThreadBegin();
 		if (ret_gqcp == 0)
 		{
 			//에러코드 로깅
@@ -338,12 +338,11 @@ inline void CLanServer::RunIoThread()
 			tracer.trace(78, session, session->session_id);
 			if (!session->disconnect)
 			{
-				session->disconnect = true;
-				CancelIoEx((HANDLE)session->sock, NULL);
+				Disconnect(session);
 			}
 		}
 		else {
-			OnWorkerThreadBegin();
+		
 			if (&session->recv_overlapped == overlapped) // recv 결과 처리
 			{
 				if (session->recv_sock != session->sock)
@@ -549,6 +548,23 @@ bool CLanServer::SendPacket(unsigned long long session_id, CPacket* packet)
 }
 #endif
 
+inline void CLanServer::Disconnect(Session* session)
+{
+	//InterlockedIncrement((LONG*)&session->io_count);
+	if (session->disconnect == 0)
+	{
+		if (InterlockedCompareExchange((LONG*)&session->disconnect, true, false) == false) {
+			// pending cnt == 0 이면 cancel IO 
+			OnClientLeave(*(unsigned long long*) & session->session_id);
+			CancelIOSession(session);
+
+		}
+
+	}
+	//UpdateIOCount(session);
+
+	return;
+}
 
 inline void CLanServer::DisconnectSession(unsigned long long session_id)
 {
@@ -586,144 +602,154 @@ inline void CLanServer::DisconnectSession(unsigned long long session_id)
 inline bool CLanServer::RecvPost(Session* session)
 {
 	DWORD recvbytes, flags = 0;
+	bool ret = false;
 
-	int temp = InterlockedIncrement((LONG*)&session->io_count);
-	ZeroMemory(&session->recv_overlapped, sizeof(session->recv_overlapped));
-
-	int emptySize = session->recv_q.GetEmptySize();
-	int size1 = session->recv_q.DirectEnqueSize();
-
-	WSABUF wsabuf[2];
-	int cnt = 1;
-	wsabuf[0].buf = session->recv_q.GetRearPtr();
-	wsabuf[0].len = size1;
-
-	if (size1 < emptySize)
+	int temp_pend = InterlockedIncrement((LONG*)&session->pend_count);
+	if (session->disconnect == 0)
 	{
-		++cnt;
-		wsabuf[1].buf = session->recv_q.GetBufPtr();
-		wsabuf[1].len = emptySize - size1;
-	}
+		InterlockedIncrement((LONG*)&session->io_count);
+		ZeroMemory(&session->recv_overlapped, sizeof(session->recv_overlapped));
 
-	monitor.UpdateMaxIOCount(temp);
+		int emptySize = session->recv_q.GetEmptySize();
+		int size1 = session->recv_q.DirectEnqueSize();
 
-	SOCKET socket = session->sock;
-	session->recv_sock = socket;
-	DWORD error_code;
+		WSABUF wsabuf[2];
+		int cnt = 1;
+		wsabuf[0].buf = session->recv_q.GetRearPtr();
+		wsabuf[0].len = size1;
 
-	int retval = WSARecv(socket, wsabuf, cnt, &recvbytes, &flags, &session->recv_overlapped, NULL);
-	if (retval == SOCKET_ERROR)
-	{
-		if ((error_code = WSAGetLastError()) != ERROR_IO_PENDING)
-		{ // 요청이 실패
-			int io_temp = UpdateIOCount(session);
-			tracer.trace(1, session, error_code, socket);
-		}
-		else
+		if (size1 < emptySize)
 		{
-			tracer.trace(73, session, socket);
-			// Pending
-		}
-	}
-	else
-	{
-		tracer.trace(73, session, socket);
-		//동기 recv
-	}
-
-	return true;
-}
-
-inline bool CLanServer::SendPost(Session* session)
-{
-	bool temp;
-	LARGE_INTEGER start, end;
-
-	if ((temp = InterlockedExchange((LONG*)&session->send_flag, true)) == false)
-	{
-		long long buf_cnt = session->send_q.GetSize();
-		if (buf_cnt <= 0)
-		{
-			log_arr[8]++;
-			session->send_flag = false;
-			return true;
-		}
-		int temp = InterlockedIncrement((LONG*)&session->io_count);
-
-		int retval;
-
-		ZeroMemory(&session->send_overlapped, sizeof(session->send_overlapped));
-
-		// 개선 필요
-		if (buf_cnt > MAX_WSABUF)
-			buf_cnt = MAX_WSABUF;
-
-		WSABUF wsabuf[MAX_WSABUF];
-		ZeroMemory(wsabuf, sizeof(wsabuf));
-
-#ifdef AUTO_PACKET
-		PacketPtr packet;
-		for (int cnt = 0; cnt < buf_cnt;)
-		{
-			if (session->send_q.Dequeue(&packet) == false) continue;
-			
-
-			wsabuf[cnt].buf = (*packet)->GetBufferPtrLan();
-			wsabuf[cnt].len = (*packet)->GetDataSizeLan();
-			session->temp_packet[cnt] = packet;
-
 			++cnt;
+			wsabuf[1].buf = session->recv_q.GetBufPtr();
+			wsabuf[1].len = emptySize - size1;
 		}
-#else
-		CPacket* packet;
-		for (int cnt = 0; cnt < buf_cnt;)
-		{
-			if (!session->send_q.Dequeue(&packet)) continue;
-			
-			wsabuf[cnt].buf = packet->GetBufferPtrWithHeader();
-			wsabuf[cnt].len = packet->GetDataSizeWithHeader();
-			session->temp_packet[cnt] = packet;
 
-			++cnt;
-		}
-#endif
 
-		session->send_packet_cnt = buf_cnt;
-		DWORD sendbytes;
-		monitor.UpdateMaxIOCount(temp);
-		monitor.IncSend();
-;
 		SOCKET socket = session->sock;
-		session->send_sock = socket;
-		QueryPerformanceCounter(&start);
-		retval = WSASend(socket, wsabuf, buf_cnt, &sendbytes, 0, &session->send_overlapped, NULL);
-		QueryPerformanceCounter(&end);
-		monitor.AddSendTime(&start, &end);
-
-
+		session->recv_sock = socket;
 		DWORD error_code;
+
+		int retval = WSARecv(socket, wsabuf, cnt, NULL, &flags, &session->recv_overlapped, NULL);
+
 		if (retval == SOCKET_ERROR)
 		{
-			if ((error_code = WSAGetLastError()) != WSA_IO_PENDING) // 요청 자체가 실패
-			{
-				// 내가 release 시켜야하는 경우 Packet 해제 해줘야 함
+			if ((error_code = WSAGetLastError()) != ERROR_IO_PENDING)
+			{ // 요청이 실패
+				Disconnect(session); // 항상? 10054 일 때만?? 
 				int io_temp = UpdateIOCount(session);
-				tracer.trace(2, session, error_code, socket);
+				tracer.trace(1, session, error_code, socket);
 			}
 			else
 			{
-				tracer.trace(72, session, socket);
+				//tracer.trace(73, session, socket);
 				// Pending
+				ret = true;
 			}
 		}
 		else
 		{
-			//동기처리
+			//tracer.trace(73, session, socket);
+			//동기 recv
+			ret = true;
 		}
-
 	}
+	UpdatePendCount(session);
 
-	return temp;
+	return ret;
+}
+
+inline void CLanServer::SendPost(Session* session)
+{
+	LARGE_INTEGER start, end;
+
+	int temp_pend = InterlockedIncrement((LONG*)&session->pend_count);
+	if (session->disconnect == 0)
+	{
+
+		if ((InterlockedExchange((LONG*)&session->send_flag, true)) == false) // compare exchange
+		{
+			long long buf_cnt = session->send_q.GetSize();
+			if (buf_cnt <= 0)
+			{
+				log_arr[8]++;
+				session->send_flag = false;
+				return;
+			}
+			int temp_io = InterlockedIncrement((LONG*)&session->io_count);
+			int retval;
+
+			ZeroMemory(&session->send_overlapped, sizeof(session->send_overlapped));
+
+			// 개선 필요
+			if (buf_cnt > MAX_WSABUF)
+				buf_cnt = MAX_WSABUF;
+
+			WSABUF wsabuf[MAX_WSABUF];
+			ZeroMemory(wsabuf, sizeof(wsabuf));
+
+#ifdef AUTO_PACKET
+			PacketPtr packet;
+			for (int cnt = 0; cnt < buf_cnt;)
+			{
+				if (session->send_q.Dequeue(&packet) == false) continue;
+
+
+				wsabuf[cnt].buf = (*packet)->GetBufferPtrLan();
+				wsabuf[cnt].len = (*packet)->GetDataSizeLan();
+				session->temp_packet[cnt] = packet;
+
+				++cnt;
+			}
+#else
+			CPacket* packet;
+			for (int cnt = 0; cnt < buf_cnt;)
+			{
+				if (!session->send_q.Dequeue(&packet)) continue;
+
+				wsabuf[cnt].buf = packet->GetBufferPtrLan();
+				wsabuf[cnt].len = packet->GetDataSizeLan();
+				session->temp_packet[cnt] = packet;
+
+				++cnt;
+			}
+#endif
+
+			session->send_packet_cnt = buf_cnt;
+			DWORD sendbytes;
+			monitor.IncSend();
+
+			SOCKET socket = session->sock;
+			session->send_sock = socket;
+			retval = WSASend(socket, wsabuf, buf_cnt, NULL, 0, &session->send_overlapped, NULL);
+			QueryPerformanceCounter(&end);
+
+			DWORD error_code;
+			if (retval == SOCKET_ERROR)
+			{
+				if ((error_code = WSAGetLastError()) != WSA_IO_PENDING) // 요청 자체가 실패
+				{
+					// 내가 release 시켜야하는 경우 Packet 해제 해줘야 함
+					Disconnect(session);
+					int io_temp = UpdateIOCount(session);
+					tracer.trace(2, session, error_code, socket);
+				}
+				else
+				{
+					//tracer.trace(72, session, socket);
+					// Pending
+				}
+			}
+			else
+			{
+				//동기처리
+			}
+		}
+	}
+	UpdatePendCount(session);
+
+
+	return;
 }
 
 inline int CLanServer::UpdateIOCount(Session* session)
@@ -741,6 +767,34 @@ inline int CLanServer::UpdateIOCount(Session* session)
 
 	return temp;
 }
+
+inline void CLanServer::UpdatePendCount(Session* session)
+{
+	// disconnect 한번에 확인
+	int temp;
+	if ((temp = InterlockedDecrement((LONG*)&session->pend_count)) == 0)
+	{
+		CancelIOSession(session);
+	}
+
+	return;
+
+}
+
+void CLanServer::CancelIOSession(Session* session)
+{
+	unsigned long long flag = *((unsigned long long*)(&session->pend_count));
+	if (flag == 0x100000000)
+	{
+		if (InterlockedCompareExchange64((LONG64*)&session->pend_count, 0x200000000, flag) == flag)
+		{
+			CancelIoEx((HANDLE)session->sock, NULL);
+		}
+	}
+
+	return;
+}
+
 
 inline void CLanServer::ReleaseSession(Session* session)
 {
@@ -784,7 +838,7 @@ inline void CLanServer::ReleaseSession(Session* session)
 			session->sock = INVALID_SOCKET;
 			
 
-			OnClientLeave(*(unsigned long long*)&session->session_id);
+			
 
 #ifdef STACK_INDEX
 			empty_session_stack.Push(session->session_index);
