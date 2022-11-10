@@ -18,12 +18,12 @@ public:
 		sendpost_in_recv_cnt = 0;
 		sendpacket_cnt = 0;
 		MaxThreadOneSession = 0;
-		MaxIOCount = 0;
 		recv_completion_time = 0;
 		recv_comp_cnt = 0;
 		send_completion_time = 0;
 		send_comp_cnt = 0;
-
+		send_to_comp_time = 0;
+		send_to_comp_cnt = 0;
 		on_recv_time = 0;
 		on_recv_cnt = 0;
 
@@ -54,13 +54,13 @@ public:
 	void AddSendTime(LARGE_INTEGER* start, LARGE_INTEGER* end);
 	void AddRecvCompTime(LARGE_INTEGER* st, LARGE_INTEGER* end);
 	void AddSendCompTime(LARGE_INTEGER* st, LARGE_INTEGER* end);
+	void AddSendToComp(LARGE_INTEGER* st, LARGE_INTEGER* end);
 	void AddOnRecvTime(LARGE_INTEGER* st, LARGE_INTEGER* end);
 
 	void UpdateMaxThread(int max);
-	void UpdateMaxIOCount(int temp);
 	void UpdateSendPacket(LONG size);
 
-	void Show(int session_cnt);
+	void Show(int session_cnt, int packet_pool, int job_queue);
 
 private:
 
@@ -74,12 +74,12 @@ private:
 	alignas(64) LONG sendpost_in_recv_cnt;
 	alignas(64) LONG sendpacket_cnt;
 	alignas(64) LONG MaxThreadOneSession;
-	alignas(64) LONG MaxIOCount;
 	alignas(64) double recv_completion_time;
 	alignas(64) LONG recv_comp_cnt;
 	alignas(64) double send_completion_time;
 	alignas(64) LONG send_comp_cnt;
-
+	alignas(64) double send_to_comp_time;
+	alignas(64) LONG send_to_comp_cnt;
 	alignas(64) double on_recv_time;
 	alignas(64) LONG on_recv_cnt;
 
@@ -90,6 +90,5 @@ private:
 	alignas(64) LONG ___cnt;
 	alignas(64) LONG fault_session;
 	alignas(64) LONG no_session;
-	alignas(64) char b;
-	LARGE_INTEGER frq;
+	alignas(64) LARGE_INTEGER frq;
 };

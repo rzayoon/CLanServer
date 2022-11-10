@@ -11,8 +11,6 @@
 
 #include <errhandlingapi.h>
 
-#include "ProfileTls.h"
-
 class CrashDump
 {
 public:
@@ -97,8 +95,6 @@ public:
 
 	static void Crash(void)
 	{
-		DWORD time = GetTickCount64();
-		ProfileDataOutText(L"lastProfile.txt");
 
 
 		int* p = nullptr;
