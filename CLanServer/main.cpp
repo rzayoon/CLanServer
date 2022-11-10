@@ -34,14 +34,13 @@ int main()
 	parser.GetValue("ServerBindPort", &port);
 	parser.GetValue("IOCPWorkerThread", &worker);
 	parser.GetValue("IOCPActiveThread", &max_worker);
-	parser.GetValue("MaxUser", &max_user);
 	parser.GetValue("MaxSession", &max_session);
 
 	wchar_t wip[16];
 
 	MultiByteToWideChar(CP_ACP, 0, ip, 16, wip, 16);
 
-	server.Start(wip, port, worker, max_worker, max_session, max_user);
+	server.Start(wip, port, worker, max_worker, max_session, false);
 
 	DWORD oldTick = timeGetTime();
 	while (1)
@@ -69,7 +68,7 @@ int main()
 	timeEndPeriod(1);
 
 	wprintf(L"Fine Closing\n");
-	Sleep(5000);
+	Sleep(2000);
 
 
 	return 0;

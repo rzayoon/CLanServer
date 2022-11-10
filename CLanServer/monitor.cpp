@@ -130,7 +130,7 @@ void Monitor::AddOnRecvTime(LARGE_INTEGER* start, LARGE_INTEGER* end)
 }
 
 
-void Monitor::Show(int session_cnt, int packet_pool, int job_queue)
+void Monitor::Show(int session_cnt, int packet_pool)
 {
 
 	int now_accept = InterlockedExchange(&accept, 0);
@@ -167,7 +167,9 @@ void Monitor::Show(int session_cnt, int packet_pool, int job_queue)
 	int max_thread_one_session = InterlockedExchange(&MaxThreadOneSession, 0);
 
 	LONG max_packet = InterlockedExchange(&max_send_packet, 0);
-	LONG min_packet = InterlockedExchange(&min_send_packet, 999999999);
+	LONG min_packet = InterlockedExchange(&min_send_packet, MAXINT32);
+	if (min_packet == MAXINT32) min_packet = 0;
+
 	LONG total_packet = InterlockedExchange(&total_send_packet, 0);
 	LONG cnt = InterlockedExchange(&___cnt, 0);
 	double avg_packet = 0;
@@ -189,20 +191,19 @@ void Monitor::Show(int session_cnt, int packet_pool, int job_queue)
 		L" > Packet avg : %.1lf\n"
 		L"SendToComp avg : %.2lf us\n"
 		L"RECV/sec : %d\n"
-		L"OnRecv/sec : %d\n"
+		L"RecvPacket/sec : %d\n"
 		L"Recv Completion : %.2lf us\n"
 		L" > OnRecv : %.2lf us\n"
 		L"Total WSASend Time : %.2lf us\n"
 		L" > Avg : %.2lf us\n"
 		L"----------------------------------\n"
 		L"PacketPool Use : %d\n"
-		L"Job Queue : %d / %d\n"
 		L"Not Found Session : %d\n"
 		, total_accept, now_accept, accept_err, session_cnt, now_send, now_send_packet
 		, send_comp_time_avg
 		, max_packet, min_packet, _min_cnt, avg_packet, stc_avg
 		, now_recv, on_rcv_cnt, recv_comp_time_avg, on_recv_time_avg
-		, total_wsa, send_time_avg, packet_pool, job_queue, 0, no_session);
+		, total_wsa, send_time_avg, packet_pool, no_session);
 
 
 	return;

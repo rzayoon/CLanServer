@@ -46,11 +46,10 @@ public:
 	/// <param name="iocp_worker"> 생성할 worker 스레드 수 </param>
 	/// <param name="iocp_active"> IOCP가 깨울 최대 스레드 수 </param>
 	/// <param name="max_session"> Accept 받을 최대 세션 수 </param>
-	/// <param name="max_user"> 컨텐츠에 넘겨줄 최대 유저 수 </param>
-	/// <returns>실패 시 false 반환</returns>
+	/// <param name="nagle"> nagle 옵션 </param>
 	bool Start(
 		const wchar_t* ip, unsigned short port,
-		int iocp_worker, int iocp_active, int max_session, int max_user);
+		int iocpWorkerNum, int iocpActiveNum, int maxSession, bool nagle);
 
 	/// <summary>
 	/// 서버 중지 스레드 정리
@@ -135,20 +134,15 @@ public:
 
 private:
 
-
 	HANDLE m_hcp;
 	HANDLE m_hAcceptThread;
 	HANDLE* m_hWorkerThread;
 	int m_iocpWorkerNum;
 	int m_iocpActiveNum;
 	int m_maxSession;
-
-protected:
-	// 컨텐츠에 넘겨줄 session 수
-	unsigned int m_maxUser;
+	bool m_nagle;
 
 private:
-	bool m_nagle;
 
 	// packet
 	/*unsigned char m_packetKey;
@@ -183,8 +177,9 @@ private:
 	unsigned int m_sess_id = 1;
 
 	Monitor monitor;
+#ifdef TRACE_SERVER
 	Tracer tracer;
-
+#endif
 	alignas(64) int m_sessionCnt = 0;
 };
 

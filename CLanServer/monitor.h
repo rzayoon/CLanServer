@@ -28,7 +28,7 @@ public:
 		on_recv_cnt = 0;
 
 		max_send_packet = 0;
-		min_send_packet = (LONG)999999999;
+		min_send_packet = (LONG)MAXINT32;
 		min_cnt = 0;
 		total_send_packet = 0;
 		___cnt = 0;
@@ -60,7 +60,7 @@ public:
 	void UpdateMaxThread(int max);
 	void UpdateSendPacket(LONG size);
 
-	void Show(int session_cnt, int packet_pool, int job_queue);
+	void Show(int session_cnt, int packet_pool);
 
 private:
 

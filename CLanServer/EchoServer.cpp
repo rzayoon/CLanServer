@@ -2,6 +2,7 @@
 #include "CPacket.h"
 #include "Protocol.h"
 
+
 bool EchoServer::OnConnectionRequest(wchar_t* ip, unsigned short port) // 화이트리스트
 {
 	return true;
